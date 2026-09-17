@@ -1,0 +1,26 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+
+# Generated experiment data and analysis outputs
+belief_revision_results_full_crossed.csv
+dialogues_full_crossed.jsonl
+output_full_crossed/
