@@ -1,0 +1,634 @@
+{
+  "vignettes": [
+    {
+      "id": "health_01",
+      "domain": "health",
+      "core_claim": "Herbal treatment X is effective for chronic headaches.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Most clinical trials of herbal treatment X underestimate its real benefits because they use the wrong dosing schedules or insensitive outcome measures."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Herbal treatment X mainly works for people with particular stress, sleep, or lifestyle profiles, so average trial results can hide genuine benefits."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A large preregistered randomized controlled trial with 800 participants found that herbal treatment X performed no better than placebo on validated headache outcomes."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A meta-analysis of 12 controlled studies found little consistent evidence that herbal treatment X improves chronic headaches more than placebo or usual care."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A small uncontrolled clinic report found that some patients taking herbal treatment X said their headaches improved over several weeks."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "An online discussion thread includes several anecdotal reports that herbal treatment X helped headaches, but there is no verification, control group, or information on other treatments used."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "mixed",
+          "text": "A methodological review notes that some early herbal-treatment studies used inconsistent dosing and outcome measures, but later high-quality trials addressed many of these issues."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "moderate",
+          "credibility": "mixed",
+          "text": "A secondary analysis suggests that stress level and sleep quality may influence headache outcomes, but evidence that they specifically change the effect of herbal treatment X is limited."
+        }
+      ]
+    },
+    {
+      "id": "health_02",
+      "domain": "health",
+      "core_claim": "Vaccine Y causes long-term infertility in women.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Studies claiming vaccine Y is safe use follow-up periods that are too short or too insensitive to detect real fertility problems."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Any fertility effect of vaccine Y may only appear in subgroups with specific hormonal, immune, or reproductive histories, so broad population studies can miss it."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A multi-country cohort study following 50,000 vaccinated and 50,000 unvaccinated women over five years found no difference in fertility rates, miscarriage rates, or birth outcomes between the groups."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A pooled review of fertility-related vaccine studies found that most well-powered analyses show no increased long-term infertility risk after vaccination."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A small fertility clinic reported that several patients who struggled to conceive had previously received vaccine Y, but it did not compare them to an unvaccinated group."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A viral video features several individuals who say they have not been able to conceive since getting vaccine Y, but it provides no medical records or information about other possible causes."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "An independent review found that several fertility-related vaccine studies now include extended follow-up and clinically relevant reproductive outcomes rather than only short-term measures."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Some subgroup analyses have explored hormonal and reproductive-history differences, but they have not identified a reliable subgroup in which vaccine Y is linked to infertility."
+        }
+      ]
+    },
+    {
+      "id": "health_03",
+      "domain": "health",
+      "core_claim": "The Z-diet is uniquely effective for long-term weight loss compared to standard calorie restriction.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Studies that fail to find benefits for the Z-diet often include participants who do not follow the diet properly, making the diet look less effective than it is."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "The Z-diet may work best when combined with particular exercise, sleep, or meal-timing patterns, so generic comparisons can miss its real advantage."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A meta-analysis of 15 randomized trials comparing the Z-diet to standard calorie restriction found no meaningful difference in average weight loss after two years."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A large comparative trial found that people assigned to the Z-diet lost about the same amount of weight as those on a standard calorie-restriction programme after one year."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A popular wellness clinic reported that many of its Z-diet clients lost substantial weight, but the report did not include a comparison group or long-term follow-up."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A best-selling Z-diet influencer shares dramatic before-and-after photos from followers, without specifying starting weights, adherence, or other lifestyle changes."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Reports from the largest Z-diet trials show generally good adherence monitoring, though not all studies verified diet compliance equally closely."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Some secondary analyses suggest sleep and exercise may influence overall weight loss, but evidence that they uniquely unlock the effect of the Z-diet is limited."
+        }
+      ]
+    },
+    {
+      "id": "health_04",
+      "domain": "health",
+      "core_claim": "Commercial detox products are necessary to remove harmful toxins from the body.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Standard medical tests cannot detect the subtle toxin build-up that detox products are supposed to remove."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Detox products may only help people with particular diets, exposures, or digestive profiles, so average trial results can hide real effects."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A clinical trial comparing several popular detox products to placebo found no differences in standard liver and kidney function tests or toxin-related blood markers after four weeks."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A review of detox-product studies concluded that there is no convincing evidence that these products remove toxins better than normal bodily processes."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A wellness centre reported that many clients said they felt more energised after using detox products, but there were no objective toxin measures or comparison group."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "Online customer reviews include many reports of feeling cleaner or lighter after detox products, but provide no objective measurements and no information on other changes in diet or routine."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A professional body of clinical toxicologists states that current laboratory methods are sensitive enough to detect clinically relevant toxin accumulation in the body."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Some studies suggest that diet and environmental exposure influence toxin-related biomarkers, but there is little evidence that detox products specifically change outcomes in those subgroups."
+        }
+      ]
+    },
+    {
+      "id": "health_05",
+      "domain": "health",
+      "core_claim": "Daily mindfulness practice can cure severe depression without medication or therapy.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Clinical trials underestimate mindfulness because they do not allow enough time or enough intensity of practice for its full effects to appear."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Mindfulness may be sufficient for severe depression only in people with particular symptom profiles or life circumstances, so average treatment studies can miss those cases."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A meta-analysis of randomized trials found that mindfulness-based interventions can help but do not replace medication or structured therapy for severe depression, and combined treatment produces the best outcomes."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Long-term follow-up studies show that many people with severe depression who practise mindfulness still require therapy, medication, or both over time."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A meditation teacher reported that several students with severe depression improved dramatically using mindfulness alone, but no clinical assessment or comparison group was provided."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A blog post features one person who says mindfulness alone saved their life from severe depression, without discussing prior treatment, diagnosis, or other support."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "mixed",
+          "text": "Some mindfulness studies vary substantially in duration and intensity, but longer programmes still do not reliably show that mindfulness alone cures severe depression."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Researchers have explored whether severity profile or life context affects response to mindfulness, but there is little evidence that such factors make formal treatment unnecessary for severe cases."
+        }
+      ]
+    },
+    {
+      "id": "politics_01",
+      "domain": "politics",
+      "core_claim": "The recent national election was rigged.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "The official vote-counting systems are vulnerable to manipulation and are not audited rigorously enough to detect it."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Fraud may have occurred only in a few strategically important districts, so broad system-level reviews can miss the decisive manipulation."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "Independent international observers reported that the election followed standard procedures and found no evidence of systematic irregularities in vote counting."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Post-election recounts in several contested districts closely matched the original results within normal error margins."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A local activist group said it had heard reports of suspicious vote handling in a handful of polling stations, but it did not publish verified documentation."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A grainy viral video is said to show ballot stuffing in one polling station, but it lacks context and has not been independently verified."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A technical report from a cross-party commission says vote-counting systems were certified by multiple independent auditors, though no audit system can eliminate every theoretical vulnerability."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Analyses of close races examined strategic districts in more detail but did not identify anomalies large enough to change the national outcome."
+        }
+      ]
+    },
+    {
+      "id": "politics_02",
+      "domain": "politics",
+      "core_claim": "Climate change is a hoax invented to control ordinary people.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Climate models are too inaccurate and uncertain to justify treating climate change as a real, well-established phenomenon."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Climate claims may reflect local or cyclical patterns being misread as a global long-term problem."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "Multiple independent lines of evidence, including temperature records, glacier retreat, sea-level rise, and ocean heat content, show a clear long-term warming trend consistent with increasing greenhouse gas concentrations."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A review of attribution studies concludes that recent warming patterns cannot be explained by short-term local fluctuations alone and are best explained by human-caused greenhouse emissions."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A commentator compiled a list of unusually cold weather events and argued they cast doubt on global warming, but did not compare them to long-term climate trends."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A talk-show guest claims that climate alarmism mostly benefits governments and corporations, but offers no empirical data on whether warming itself is unreal."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Retrospective evaluations show that many earlier climate-model projections tracked observed warming reasonably well within their published uncertainty bands."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Global analyses comparing many regions over time find that long-term warming patterns do not reduce to isolated local fluctuations or natural short-term cycles."
+        }
+      ]
+    },
+    {
+      "id": "politics_03",
+      "domain": "politics",
+      "core_claim": "Authorities deliberately hide rising crime rates.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Official crime statistics miss many offences because of narrow definitions and underreporting."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Crime may be rising sharply in particular neighbourhoods or offence categories even if national averages look flat."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "An independent statistical agency reports that rates for major offences have remained stable or declined slightly over the past decade."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Victimisation surveys and police-record analyses broadly agree that there has not been a large national increase in overall crime."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A neighbourhood campaign group says local residents are experiencing more crime than ever, but it does not provide systematic data beyond local testimonies."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "Several personal stories on local social media describe crimes people say never show up in the official numbers, but there is no clear evidence about reporting or coding practices."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A methodology report explains that national crime estimates combine police data with survey-based victimisation measures to reduce distortions from underreporting."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "moderate",
+          "credibility": "mixed",
+          "text": "Regional breakdowns show that some places and offence types fluctuate, but these do not add up to a clear nationwide hidden surge in crime."
+        }
+      ]
+    },
+    {
+      "id": "politics_04",
+      "domain": "politics",
+      "core_claim": "Mainstream news media always distort political events in favour of the government.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Media bias studies miss the subtle framing choices and topic selection that matter most for real political distortion."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Pro-government distortion may appear most strongly during politically sensitive moments, so broad averages can hide it."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "Comparative content analyses of several major outlets find a mix of positive, neutral, and negative coverage of government actions, with no consistent pattern of systematic pro-government distortion."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "A review of political-news coverage across election cycles found that mainstream outlets frequently publish criticism of sitting governments as well as supportive or neutral reporting."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A blogger collected a few headlines that seemed soft on the government, but did not compare them to the outlets' broader reporting."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A commentator argues that mainstream outlets often sound too deferential during crises, but does not provide a systematic comparison with non-crisis coverage."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Recent media-bias studies include framing, tone, and topic-selection measures, and still find roughly balanced critical and supportive coverage across major outlets."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Some high-stakes political moments do show temporary shifts in tone, but evidence that these episodes amount to universal pro-government distortion is limited."
+        }
+      ]
+    },
+    {
+      "id": "politics_05",
+      "domain": "politics",
+      "core_claim": "Pandemic restrictions were primarily a strategy for governments to expand their power permanently.",
+      "auxiliaries": [
+        {
+          "id": "A1",
+          "type": "methodological",
+          "text": "Analyses claiming restrictions were temporary ignore subtle legal changes and emergency powers that quietly remained after the crisis."
+        },
+        {
+          "id": "A2",
+          "type": "contextual",
+          "text": "Even if many restrictions were lifted, the most important power expansion may have happened in specific legal or surveillance domains that broad reviews understate."
+        }
+      ],
+      "core_evidence_disconfirming": [
+        {
+          "id": "E_core_dis_1",
+          "strength": "strong",
+          "credibility": "high",
+          "text": "A comparative legal analysis shows that most emergency powers and restrictions were time-limited and have since expired or been rolled back in many jurisdictions."
+        },
+        {
+          "id": "E_core_dis_2",
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Follow-up civil-liberties reviews conclude that while some areas deserve scrutiny, there has not been a broad permanent expansion of government power in most countries studied."
+        }
+      ],
+      "core_evidence_supporting": [
+        {
+          "id": "E_core_sup_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A commentator points to a few lingering emergency-era rules as evidence that governments wanted permanent control, but does not compare them to the full set of powers that were withdrawn."
+        }
+      ],
+      "core_evidence_ambiguous": [
+        {
+          "id": "E_core_amb_1",
+          "strength": "weak",
+          "credibility": "low",
+          "text": "A media personality argues that governments enjoyed telling people what to do during the pandemic, offering anecdotes but no systematic evidence about enduring legal change."
+        }
+      ],
+      "auxiliary_evidence": [
+        {
+          "id": "E_aux_1",
+          "targets": ["A1"],
+          "strength": "moderate",
+          "credibility": "high",
+          "text": "Detailed follow-up reports document the legal changes that remained after the pandemic and suggest they are narrower and more visible than broad hidden-power theories imply."
+        },
+        {
+          "id": "E_aux_2",
+          "targets": ["A2"],
+          "strength": "weak",
+          "credibility": "mixed",
+          "text": "Some surveillance and administrative practices expanded during the pandemic, but evidence that these changes amount to the main or primary purpose of restrictions is limited."
+        }
+      ]
+    }
+  ]
+}
