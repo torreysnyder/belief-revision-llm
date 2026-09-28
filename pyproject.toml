@@ -15,5 +15,31 @@ dependencies = [
     "statsmodels>=0.14",
 ]
 
+[dependency-groups]
+# Open-weight models and mechanistic interpretability (TransformerLens).
+# Install with: uv sync --group interp
+interp = [
+    "accelerate>=1.0",
+    "einops>=0.8",
+    "huggingface-hub>=0.26",
+    "jaxtyping>=0.2",
+    "scikit-learn>=1.5",
+    "torch>=2.7",
+    "transformer-lens>=2.15",
+    "transformers>=4.46",
+]
+
 [tool.uv]
 package = false
+
+# CUDA builds of PyTorch come from PyTorch's own index, not PyPI.
+# macOS uses the default PyPI wheels (CPU/MPS).
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
