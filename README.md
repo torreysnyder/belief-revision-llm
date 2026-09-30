@@ -119,8 +119,10 @@ and reports the next-token prediction and peak GPU memory.
 
 `belief_revision_minimal_llama.py` is a small version of the experiment with
 Llama-3.2-1B-Instruct as the target, run locally with `transformers`. It uses
-one vignette (`politics_02`) and 30 conversations drawn from its condition
-cells. The user simulator and stance evaluator run on a local
+one vignette (`politics_03`, set by `VIGNETTE_ID`) and 30 conversations drawn
+from its condition cells. politics_03 was chosen because it showed the most
+belief change in the original run; the reasoning is recorded next to
+`VIGNETTE_ID` in the script. The user simulator and stance evaluator run on a local
 [Ollama](https://ollama.com) model, so no OpenAI key is needed.
 
 One-time Ollama setup:
@@ -138,8 +140,8 @@ uv run python belief_revision_minimal_llama.py --n 2   # quick check
 uv run python belief_revision_minimal_llama.py         # full 30 conversations
 ```
 
-It writes `belief_revision_results_minimal_llama1b.csv` and
-`dialogues_minimal_llama1b.jsonl`, saving after each conversation.
+It writes `belief_revision_results_minimal_llama1b_<vignette>.csv` and
+`dialogues_minimal_llama1b_<vignette>.jsonl`, saving after each conversation.
 
 ### GPU memory
 
