@@ -102,6 +102,16 @@ class Vignette:
 target_tokenizer = None
 target_model = None
 
+# Windows builds of PyTorch have no flash-attention kernel, and the memory-efficient
+# kernel can't take grouped-query (GQA) keys/values directly. transformers passes
+# them grouped, so SDPA falls back to the "math" kernel, which materializes the full
+# seq x seq attention matrix (~12 GB at 6k tokens) and runs out of GPU memory in
+# long conversations. Expanding K/V up front lets the memory-efficient kernel run.
+# The results are numerically equivalent; only the kernel changes.
+if not torch.backends.cuda.is_flash_attention_available():
+    import transformers.integrations.sdpa_attention as _sdpa
+    _sdpa.use_gqa_in_sdpa = lambda *args, **kwargs: False
+
 def load_target():
     global target_tokenizer, target_model
     target_tokenizer = AutoTokenizer.from_pretrained(TARGET_MODEL)
@@ -965,23 +975,37 @@ def json_default(obj):
 
 write_lock = threading.Lock()
 
+def open_when_unlocked(path, mode, **kwargs):
+    # On Windows, a file open in Excel can't be written. Wait instead of crashing
+    # and losing the conversation that was just generated.
+    warned = False
+    while True:
+        try:
+            return open(path, mode, **kwargs)
+        except PermissionError:
+            if not warned:
+                print(f"  {path} is locked (open in Excel?). Close it; waiting to save...")
+                warned = True
+            time.sleep(5)
+
 def save_results_append(results, csv_path, jsonl_path, write_header):
     if not results:
         return
     with write_lock:
-        with open(jsonl_path, "a", encoding="utf-8") as f:
-            for r in results:
-                f.write(json.dumps(r, ensure_ascii=False, default=json_default) + "\n")
-
+        # CSV first, so the two files stay in step if the CSV is locked.
         fieldnames = list(results[0]["rows"][0].keys())
         mode = "w" if write_header else "a"
-        with open(csv_path, mode, newline="", encoding="utf-8") as f:
+        with open_when_unlocked(csv_path, mode, newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             if write_header:
                 writer.writeheader()
             for r in results:
                 for row in r["rows"]:
                     writer.writerow(row)
+
+        with open_when_unlocked(jsonl_path, "a", encoding="utf-8") as f:
+            for r in results:
+                f.write(json.dumps(r, ensure_ascii=False, default=json_default) + "\n")
 
 def sample_run_specs(vignette, n_conversations, seed):
     """Sample n condition cells and give each a replicate index.
@@ -1022,9 +1046,9 @@ if __name__ == "__main__":
 
     load_target()
 
-    open(JSONL_PATH, "w").close()
-    if os.path.exists(CSV_PATH):
-        os.remove(CSV_PATH)
+    # Start fresh: truncate both output files.
+    open_when_unlocked(JSONL_PATH, "w").close()
+    open_when_unlocked(CSV_PATH, "w").close()
 
     first_write = True
     n_failed = 0
@@ -1041,6 +1065,9 @@ if __name__ == "__main__":
         except Exception as e:
             n_failed += 1
             print(f"  Conversation failed: {e}")
+            # Return GPU memory held by the failed conversation before the next one.
+            del e
+            torch.cuda.empty_cache()
             continue
 
         save_results_append([result], csv_path=CSV_PATH, jsonl_path=JSONL_PATH, write_header=first_write)
