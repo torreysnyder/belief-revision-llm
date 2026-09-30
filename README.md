@@ -13,6 +13,24 @@ multi-turn conversation.
 - `vignettes_revised.json` defines the health and political belief-revision
   vignettes used by the experiment.
 
+## Experiment workflow
+
+[![Belief-revision experiment workflow](assets/original_flow.svg)](assets/original_flow.svg)
+
+The workflow proceeds from experiment configuration and deterministic run-plan
+construction through parallel conversation execution, generated datasets, and
+the analysis pipeline. Select the diagram to open the full-resolution version.
+
+## Development status
+
+The operational entry points remain `belief_revision_experiment.py` and
+`analysis_full_crossed.py`; the run commands below are unchanged. An incremental
+restructure is being developed under `src/belief_revision/`. The shared models,
+experiment configuration, and deterministic design logic are currently
+implemented in `models.py`, `config.py`, and `design.py`. The remaining new
+modules, configuration profiles, scripts, and tests are placeholders that will
+be completed and connected one component at a time.
+
 ## Setup
 
 Python 3.10 or newer and [uv](https://docs.astral.sh/uv/) are required. Create
