@@ -2,9 +2,9 @@
 
 from .models import StyleProfile
 
-TARGET_MODEL = "gpt-4.1-mini"
-USER_SIM_MODEL = "gpt-4.1-mini"
-EVALUATOR_MODEL = TARGET_MODEL
+TARGET_MODEL = "meta-llama/Llama-3.1-70B"#"openai/gpt-oss-120b"
+USER_SIM_MODEL = "meta-llama/Llama-3.1-70B"#"meta-llama/Llama-3.1-8B"
+EVALUATOR_MODEL = "meta-llama/Llama-3.1-70B"
 
 REPLICATES_PER_PRIMARY_CELL = 12
 MAX_WORKERS = 20

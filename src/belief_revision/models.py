@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 @dataclass
 class Auxiliary:
@@ -139,3 +140,12 @@ class ConversationResult:
     dialogue_history: list[DialogueTurn]
     probe_outputs: list[BehavioralProbeResult]
     result_rows: list[dict[str, object]]
+
+@dataclass
+class PromptTemplate:
+    """Metadata describing a versioned prompt template file."""
+
+    name: str
+    version: str
+    template_path: Path
+    required_variables: list[str]

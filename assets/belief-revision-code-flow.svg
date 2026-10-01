@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Title: BeliefRevisionFlow Pages: 1 -->
+<svg width="959pt" height="1811pt"
+ viewBox="0.00 0.00 959.40 1811.22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(25.2 1786.02)">
+<title>BeliefRevisionFlow</title>
+<polygon fill="white" stroke="none" points="-25.2,25.2 -25.2,-1786.02 934.2,-1786.02 934.2,25.2 -25.2,25.2"/>
+<text text-anchor="middle" x="454.5" y="-1735.92" font-family="Helvetica,sans-Serif" font-size="22.00" fill="#172033">BELIEF REVISION LLM — CODE FLOW</text>
+<g id="clust1" class="cluster">
+<title>cluster_inputs</title>
+<path fill="white" stroke="#239a91" stroke-width="1.8" stroke-dasharray="5,2" d="M20,-1627.67C20,-1627.67 485,-1627.67 485,-1627.67 491,-1627.67 497,-1633.67 497,-1639.67 497,-1639.67 497,-1710.32 497,-1710.32 497,-1716.32 491,-1722.32 485,-1722.32 485,-1722.32 20,-1722.32 20,-1722.32 14,-1722.32 8,-1716.32 8,-1710.32 8,-1710.32 8,-1639.67 8,-1639.67 8,-1633.67 14,-1627.67 20,-1627.67"/>
+<text text-anchor="middle" x="252.5" y="-1697.42" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="22.00" fill="#16766f">1 &#160;INPUTS &amp; CONFIGURATION</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_design</title>
+<path fill="white" stroke="#7c5ac7" stroke-width="1.8" stroke-dasharray="5,2" d="M162,-1506.02C162,-1506.02 889,-1506.02 889,-1506.02 895,-1506.02 901,-1512.02 901,-1518.02 901,-1518.02 901,-1588.67 901,-1588.67 901,-1594.67 895,-1600.67 889,-1600.67 889,-1600.67 162,-1600.67 162,-1600.67 156,-1600.67 150,-1594.67 150,-1588.67 150,-1588.67 150,-1518.02 150,-1518.02 150,-1512.02 156,-1506.02 162,-1506.02"/>
+<text text-anchor="middle" x="525.5" y="-1575.77" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="22.00" fill="#6543ad">2 &#160;EXPERIMENT DESIGN</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_conversation</title>
+<path fill="white" stroke="#d18b00" stroke-width="1.8" stroke-dasharray="5,2" d="M436,-610.9C436,-610.9 884,-610.9 884,-610.9 890,-610.9 896,-616.9 896,-622.9 896,-622.9 896,-1467.02 896,-1467.02 896,-1473.02 890,-1479.02 884,-1479.02 884,-1479.02 436,-1479.02 436,-1479.02 430,-1479.02 424,-1473.02 424,-1467.02 424,-1467.02 424,-622.9 424,-622.9 424,-616.9 430,-610.9 436,-610.9"/>
+<text text-anchor="middle" x="660" y="-1454.12" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="22.00" fill="#9a6500">3 &#160;PARALLEL CONVERSATION EXECUTION</text>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_outputs</title>
+<path fill="white" stroke="#3a9b52" stroke-width="1.8" stroke-dasharray="5,2" d="M408,-410.6C408,-410.6 770,-410.6 770,-410.6 776,-410.6 782,-416.6 782,-422.6 782,-422.6 782,-571.9 782,-571.9 782,-577.9 776,-583.9 770,-583.9 770,-583.9 408,-583.9 408,-583.9 402,-583.9 396,-577.9 396,-571.9 396,-571.9 396,-422.6 396,-422.6 396,-416.6 402,-410.6 408,-410.6"/>
+<text text-anchor="middle" x="589" y="-559" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="22.00" fill="#28743b">4 &#160;GENERATED DATA</text>
+</g>
+<g id="clust8" class="cluster">
+<title>cluster_analysis</title>
+<path fill="white" stroke="#3478c9" stroke-width="1.8" stroke-dasharray="5,2" d="M327,-8C327,-8 681,-8 681,-8 687,-8 693,-14 693,-20 693,-20 693,-371.6 693,-371.6 693,-377.6 687,-383.6 681,-383.6 681,-383.6 327,-383.6 327,-383.6 321,-383.6 315,-377.6 315,-371.6 315,-371.6 315,-20 315,-20 315,-14 321,-8 327,-8"/>
+<text text-anchor="middle" x="504" y="-358.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="22.00" fill="#255b9a">5 &#160;ANALYSIS PIPELINE</text>
+</g>
+<!-- env -->
+<g id="node1" class="node">
+<title>env</title>
+<path fill="#ddf7f3" stroke="#738096" stroke-width="1.1" d="M109.83,-1678.2C109.83,-1678.2 28.17,-1678.2 28.17,-1678.2 22.17,-1678.2 16.17,-1672.2 16.17,-1666.2 16.17,-1666.2 16.17,-1653.3 16.17,-1653.3 16.17,-1647.3 22.17,-1641.3 28.17,-1641.3 28.17,-1641.3 109.83,-1641.3 109.83,-1641.3 115.83,-1641.3 121.83,-1647.3 121.83,-1653.3 121.83,-1653.3 121.83,-1666.2 121.83,-1666.2 121.83,-1672.2 115.83,-1678.2 109.83,-1678.2"/>
+<text text-anchor="middle" x="69" y="-1661.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">.env</text>
+<text text-anchor="middle" x="69" y="-1650.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">OPENAI_API_KEY</text>
+</g>
+<!-- pool -->
+<g id="node8" class="node">
+<title>pool</title>
+<path fill="#fff1c7" stroke="#738096" stroke-width="1.1" d="M528.33,-1433.4C528.33,-1433.4 443.67,-1433.4 443.67,-1433.4 437.67,-1433.4 431.67,-1427.4 431.67,-1421.4 431.67,-1421.4 431.67,-1408.5 431.67,-1408.5 431.67,-1402.5 437.67,-1396.5 443.67,-1396.5 443.67,-1396.5 528.33,-1396.5 528.33,-1396.5 534.33,-1396.5 540.33,-1402.5 540.33,-1408.5 540.33,-1408.5 540.33,-1421.4 540.33,-1421.4 540.33,-1427.4 534.33,-1433.4 528.33,-1433.4"/>
+<text text-anchor="middle" x="486" y="-1416.7" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">ThreadPoolExecutor</text>
+<text text-anchor="middle" x="486" y="-1405.45" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">run replicate</text>
+</g>
+<!-- env&#45;&gt;pool -->
+<g id="edge13" class="edge">
+<title>env&#45;&gt;pool</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M69,-1640.95C69,-1583.64 69,-1415 69,-1415 69,-1415 422.24,-1415 422.24,-1415"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="422.24,-1417.63 429.74,-1415 422.24,-1412.38 422.24,-1417.63"/>
+<text text-anchor="middle" x="100.12" y="-1534.42" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">API client</text>
+</g>
+<!-- vignettes -->
+<g id="node2" class="node">
+<title>vignettes</title>
+<path fill="#ddf7f3" stroke="#738096" stroke-width="1.1" d="M293.33,-1678.2C293.33,-1678.2 160.67,-1678.2 160.67,-1678.2 154.67,-1678.2 148.67,-1672.2 148.67,-1666.2 148.67,-1666.2 148.67,-1653.3 148.67,-1653.3 148.67,-1647.3 154.67,-1641.3 160.67,-1641.3 160.67,-1641.3 293.33,-1641.3 293.33,-1641.3 299.33,-1641.3 305.33,-1647.3 305.33,-1653.3 305.33,-1653.3 305.33,-1666.2 305.33,-1666.2 305.33,-1672.2 299.33,-1678.2 293.33,-1678.2"/>
+<text text-anchor="middle" x="227" y="-1661.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">vignettes_revised.json</text>
+<text text-anchor="middle" x="227" y="-1650.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Core claim + A1/A2 + evidence</text>
+</g>
+<!-- load -->
+<g id="node4" class="node">
+<title>load</title>
+<path fill="#eee8ff" stroke="#738096" stroke-width="1.1" d="M265.95,-1556.1C265.95,-1556.1 170.05,-1556.1 170.05,-1556.1 164.05,-1556.1 158.05,-1550.1 158.05,-1544.1 158.05,-1544.1 158.05,-1532.1 158.05,-1532.1 158.05,-1526.1 164.05,-1520.1 170.05,-1520.1 170.05,-1520.1 265.95,-1520.1 265.95,-1520.1 271.95,-1520.1 277.95,-1526.1 277.95,-1532.1 277.95,-1532.1 277.95,-1544.1 277.95,-1544.1 277.95,-1550.1 271.95,-1556.1 265.95,-1556.1"/>
+<text text-anchor="middle" x="218" y="-1534.22" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Load + parse vignettes</text>
+</g>
+<!-- vignettes&#45;&gt;load -->
+<g id="edge14" class="edge">
+<title>vignettes&#45;&gt;load</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M218,-1641C218,-1641 218,-1565.5 218,-1565.5"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="220.63,-1565.5 218,-1558 215.38,-1565.5 220.63,-1565.5"/>
+</g>
+<!-- constants -->
+<g id="node3" class="node">
+<title>constants</title>
+<path fill="#ddf7f3" stroke="#738096" stroke-width="1.1" d="M477.33,-1683.82C477.33,-1683.82 344.67,-1683.82 344.67,-1683.82 338.67,-1683.82 332.67,-1677.82 332.67,-1671.82 332.67,-1671.82 332.67,-1647.67 332.67,-1647.67 332.67,-1641.67 338.67,-1635.67 344.67,-1635.67 344.67,-1635.67 477.33,-1635.67 477.33,-1635.67 483.33,-1635.67 489.33,-1641.67 489.33,-1647.67 489.33,-1647.67 489.33,-1671.82 489.33,-1671.82 489.33,-1677.82 483.33,-1683.82 477.33,-1683.82"/>
+<text text-anchor="middle" x="411" y="-1667.12" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Experiment constants</text>
+<text text-anchor="middle" x="411" y="-1655.87" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">models · phases · 12 replicates</text>
+<text text-anchor="middle" x="411" y="-1644.62" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">20 worker threads</text>
+</g>
+<!-- cells -->
+<g id="node5" class="node">
+<title>cells</title>
+<path fill="#eee8ff" stroke="#738096" stroke-width="1.1" d="M478.83,-1562.17C478.83,-1562.17 343.17,-1562.17 343.17,-1562.17 337.17,-1562.17 331.17,-1556.17 331.17,-1550.17 331.17,-1550.17 331.17,-1526.02 331.17,-1526.02 331.17,-1520.02 337.17,-1514.02 343.17,-1514.02 343.17,-1514.02 478.83,-1514.02 478.83,-1514.02 484.83,-1514.02 490.83,-1520.02 490.83,-1526.02 490.83,-1526.02 490.83,-1550.17 490.83,-1550.17 490.83,-1556.17 484.83,-1562.17 478.83,-1562.17"/>
+<text text-anchor="middle" x="411" y="-1545.47" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Build primary cells</text>
+<text text-anchor="middle" x="411" y="-1534.22" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">10 vignettes × 3 styles × 2 trust</text>
+<text text-anchor="middle" x="411" y="-1522.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">× 4 goals × 3 anchors = 720</text>
+</g>
+<!-- constants&#45;&gt;cells -->
+<g id="edge15" class="edge">
+<title>constants&#45;&gt;cells</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M411,-1635.42C411,-1635.42 411,-1571.62 411,-1571.62"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="413.63,-1571.62 411,-1564.12 408.38,-1571.62 413.63,-1571.62"/>
+</g>
+<!-- load&#45;&gt;cells -->
+<g id="edge16" class="edge">
+<title>load&#45;&gt;cells</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M278.27,-1538C278.27,-1538 321.76,-1538 321.76,-1538"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="321.76,-1540.63 329.26,-1538 321.76,-1535.38 321.76,-1540.63"/>
+</g>
+<!-- plans -->
+<g id="node6" class="node">
+<title>plans</title>
+<path fill="#eee8ff" stroke="#738096" stroke-width="1.1" d="M675.58,-1562.17C675.58,-1562.17 556.42,-1562.17 556.42,-1562.17 550.42,-1562.17 544.42,-1556.17 544.42,-1550.17 544.42,-1550.17 544.42,-1526.02 544.42,-1526.02 544.42,-1520.02 550.42,-1514.02 556.42,-1514.02 556.42,-1514.02 675.58,-1514.02 675.58,-1514.02 681.58,-1514.02 687.58,-1520.02 687.58,-1526.02 687.58,-1526.02 687.58,-1550.17 687.58,-1550.17 687.58,-1556.17 681.58,-1562.17 675.58,-1562.17"/>
+<text text-anchor="middle" x="616" y="-1545.47" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Build deterministic run plans</text>
+<text text-anchor="middle" x="616" y="-1534.22" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">12 replicates per cell</text>
+<text text-anchor="middle" x="616" y="-1522.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">= 8,640 conversations</text>
+</g>
+<!-- cells&#45;&gt;plans -->
+<g id="edge17" class="edge">
+<title>cells&#45;&gt;plans</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M491.14,-1538C491.14,-1538 534.69,-1538 534.69,-1538"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="534.69,-1540.63 542.19,-1538 534.69,-1535.38 534.69,-1540.63"/>
+</g>
+<!-- plans&#45;&gt;pool -->
+<g id="edge18" class="edge">
+<title>plans&#45;&gt;pool</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M555.67,-1513.78C555.67,-1477.9 555.67,-1415 555.67,-1415 555.67,-1415 549.79,-1415 549.79,-1415"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="549.79,-1412.38 542.29,-1415 549.79,-1417.63 549.79,-1412.38"/>
+</g>
+<!-- balance -->
+<g id="node7" class="node">
+<title>balance</title>
+<path fill="#eee8ff" stroke="#738096" stroke-width="1.1" d="M881.21,-1562.17C881.21,-1562.17 726.79,-1562.17 726.79,-1562.17 720.79,-1562.17 714.79,-1556.17 714.79,-1550.17 714.79,-1550.17 714.79,-1526.02 714.79,-1526.02 714.79,-1520.02 720.79,-1514.02 726.79,-1514.02 726.79,-1514.02 881.21,-1514.02 881.21,-1514.02 887.21,-1514.02 893.21,-1520.02 893.21,-1526.02 893.21,-1526.02 893.21,-1550.17 893.21,-1550.17 893.21,-1556.17 887.21,-1562.17 881.21,-1562.17"/>
+<text text-anchor="middle" x="804" y="-1545.47" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Counterbalance + select evidence</text>
+<text text-anchor="middle" x="804" y="-1534.22" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">auxiliary order · core evidence order</text>
+<text text-anchor="middle" x="804" y="-1522.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">ambiguous/supporting · A1/A2 target</text>
+</g>
+<!-- phases -->
+<g id="node10" class="node">
+<title>phases</title>
+<path fill="#fff1c7" stroke="#738096" stroke-width="1.1" d="M755.08,-1440.52C755.08,-1440.52 578.92,-1440.52 578.92,-1440.52 572.92,-1440.52 566.92,-1434.52 566.92,-1428.52 566.92,-1428.52 566.92,-1401.37 566.92,-1401.37 566.92,-1395.37 572.92,-1389.37 578.92,-1389.37 578.92,-1389.37 755.08,-1389.37 755.08,-1389.37 761.08,-1389.37 767.08,-1395.37 767.08,-1401.37 767.08,-1401.37 767.08,-1428.52 767.08,-1428.52 767.08,-1434.52 761.08,-1440.52 755.08,-1440.52"/>
+<text text-anchor="middle" x="667" y="-1423.82" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Six&#45;phase loop</text>
+<text text-anchor="middle" x="667" y="-1412.57" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">intro → challenge 1 → elaboration 1</text>
+<text text-anchor="middle" x="667" y="-1399.82" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">→ challenge 2 → elaboration 2 → closing</text>
+</g>
+<!-- balance&#45;&gt;phases -->
+<g id="edge3" class="edge">
+<title>balance&#45;&gt;phases</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M740.94,-1513.76C740.94,-1513.76 740.94,-1450.17 740.94,-1450.17"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="743.56,-1450.17 740.94,-1442.67 738.31,-1450.17 743.56,-1450.17"/>
+</g>
+<!-- state -->
+<g id="node9" class="node">
+<title>state</title>
+<path fill="#fff1c7" stroke="#738096" stroke-width="1.1" d="M817.96,-1320.8C817.96,-1320.8 704.04,-1320.8 704.04,-1320.8 698.04,-1320.8 692.04,-1314.8 692.04,-1308.8 692.04,-1308.8 692.04,-1295.9 692.04,-1295.9 692.04,-1289.9 698.04,-1283.9 704.04,-1283.9 704.04,-1283.9 817.96,-1283.9 817.96,-1283.9 823.96,-1283.9 829.96,-1289.9 829.96,-1295.9 829.96,-1295.9 829.96,-1308.8 829.96,-1308.8 829.96,-1314.8 823.96,-1320.8 817.96,-1320.8"/>
+<text text-anchor="middle" x="761" y="-1304.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Initialize seeded user state</text>
+<text text-anchor="middle" x="761" y="-1292.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">beliefs · affect · trust · goal</text>
+</g>
+<!-- pool&#45;&gt;state -->
+<g id="edge1" class="edge">
+<title>pool&#45;&gt;state</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M525.78,-1396.19C525.78,-1381.31 525.78,-1363 525.78,-1363 525.78,-1363 729.56,-1363 729.56,-1363 729.56,-1363 729.56,-1330.45 729.56,-1330.45"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="732.19,-1330.45 729.56,-1322.95 726.94,-1330.45 732.19,-1330.45"/>
+</g>
+<!-- state&#45;&gt;balance -->
+<g id="edge2" class="edge">
+<title>state&#45;&gt;balance</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M798.52,-1321.24C798.52,-1321.24 798.52,-1504.32 798.52,-1504.32"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="795.89,-1504.32 798.52,-1511.82 801.14,-1504.32 795.89,-1504.32"/>
+</g>
+<!-- inject -->
+<g id="node11" class="node">
+<title>inject</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M577.03,-1331.51C577.03,-1331.51 522.2,-1307.21 522.2,-1307.21 516.72,-1304.78 516.72,-1299.92 522.2,-1297.49 522.2,-1297.49 577.03,-1273.19 577.03,-1273.19 582.51,-1270.76 593.49,-1270.76 598.97,-1273.19 598.97,-1273.19 653.8,-1297.49 653.8,-1297.49 659.28,-1299.92 659.28,-1304.78 653.8,-1307.21 653.8,-1307.21 598.97,-1331.51 598.97,-1331.51 593.49,-1333.94 582.51,-1333.94 577.03,-1331.51"/>
+<text text-anchor="middle" x="588" y="-1304.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Inject selected</text>
+<text text-anchor="middle" x="588" y="-1292.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">evidence now?</text>
+</g>
+<!-- phases&#45;&gt;inject -->
+<g id="edge4" class="edge">
+<title>phases&#45;&gt;inject</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M615.85,-1389.11C615.85,-1389.11 615.85,-1333.51 615.85,-1333.51"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="618.47,-1333.51 615.85,-1326.01 613.22,-1333.51 618.47,-1333.51"/>
+</g>
+<!-- planner -->
+<g id="node12" class="node">
+<title>planner</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M654.71,-1206.58C654.71,-1206.58 521.3,-1206.58 521.3,-1206.58 515.3,-1206.58 509.3,-1200.58 509.3,-1194.58 509.3,-1194.58 509.3,-1180.18 509.3,-1180.18 509.3,-1174.18 515.29,-1168.18 521.29,-1168.18 521.29,-1168.18 654.71,-1168.18 654.71,-1168.18 660.71,-1168.18 666.71,-1174.18 666.71,-1180.18 666.71,-1180.18 666.71,-1194.58 666.71,-1194.58 666.71,-1200.58 660.71,-1206.58 654.71,-1206.58"/>
+<text text-anchor="middle" x="588" y="-1189.88" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">User simulator</text>
+<text text-anchor="middle" x="588" y="-1178.63" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">plan dialogue act → realize turn</text>
+</g>
+<!-- inject&#45;&gt;planner -->
+<g id="edge5" class="edge">
+<title>inject&#45;&gt;planner</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M588,-1267.86C588,-1267.86 588,-1216.05 588,-1216.05"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="590.63,-1216.05 588,-1208.55 585.38,-1216.05 590.63,-1216.05"/>
+<text text-anchor="middle" x="613.12" y="-1233.78" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">update state</text>
+</g>
+<!-- target -->
+<g id="node13" class="node">
+<title>target</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M626.21,-1106.43C626.21,-1106.43 549.79,-1106.43 549.79,-1106.43 543.79,-1106.43 537.79,-1100.43 537.79,-1094.43 537.79,-1094.43 537.79,-1081.53 537.79,-1081.53 537.79,-1075.53 543.79,-1069.53 549.79,-1069.53 549.79,-1069.53 626.21,-1069.53 626.21,-1069.53 632.21,-1069.53 638.21,-1075.53 638.21,-1081.53 638.21,-1081.53 638.21,-1094.43 638.21,-1094.43 638.21,-1100.43 632.21,-1106.43 626.21,-1106.43"/>
+<text text-anchor="middle" x="588" y="-1089.73" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Target assistant</text>
+<text text-anchor="middle" x="588" y="-1078.48" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">generate response</text>
+</g>
+<!-- planner&#45;&gt;target -->
+<g id="edge6" class="edge">
+<title>planner&#45;&gt;target</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M588,-1167.74C588,-1167.74 588,-1116.14 588,-1116.14"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="590.63,-1116.14 588,-1108.64 585.38,-1116.14 590.63,-1116.14"/>
+<text text-anchor="middle" x="606" y="-1133.63" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">user turn</text>
+</g>
+<!-- auxgate -->
+<g id="node14" class="node">
+<title>auxgate</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M576.37,-1004.81C576.37,-1004.81 466.61,-976.73 466.61,-976.73 460.79,-975.25 460.79,-972.27 466.61,-970.79 466.61,-970.79 576.37,-942.71 576.37,-942.71 582.19,-941.23 593.81,-941.23 599.63,-942.71 599.63,-942.71 709.39,-970.79 709.39,-970.79 715.21,-972.27 715.21,-975.25 709.39,-976.73 709.39,-976.73 599.63,-1004.81 599.63,-1004.81 593.81,-1006.29 582.19,-1006.29 576.37,-1004.81"/>
+<text text-anchor="middle" x="588" y="-975.51" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Auxiliary invoked?</text>
+<text text-anchor="middle" x="588" y="-964.26" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Gate elaboration&#45;2 evidence</text>
+</g>
+<!-- target&#45;&gt;auxgate -->
+<g id="edge7" class="edge">
+<title>target&#45;&gt;auxgate</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M588,-1069.12C588,-1069.12 588,-1017.13 588,-1017.13"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="590.63,-1017.13 588,-1009.63 585.38,-1017.13 590.63,-1017.13"/>
+<text text-anchor="middle" x="615" y="-1034.98" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">assistant turn</text>
+</g>
+<!-- record -->
+<g id="node15" class="node">
+<title>record</title>
+<path fill="#fff1c7" stroke="#738096" stroke-width="1.1" d="M641.58,-886.74C641.58,-886.74 534.42,-886.74 534.42,-886.74 528.42,-886.74 522.42,-880.74 522.42,-874.74 522.42,-874.74 522.42,-861.84 522.42,-861.84 522.42,-855.84 528.42,-849.84 534.42,-849.84 534.42,-849.84 641.58,-849.84 641.58,-849.84 647.58,-849.84 653.58,-855.84 653.58,-861.84 653.58,-861.84 653.58,-874.74 653.58,-874.74 653.58,-880.74 647.58,-886.74 641.58,-886.74"/>
+<text text-anchor="middle" x="588" y="-870.04" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Record turn metadata</text>
+<text text-anchor="middle" x="588" y="-858.79" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">conversation + user state</text>
+</g>
+<!-- auxgate&#45;&gt;record -->
+<g id="edge8" class="edge">
+<title>auxgate&#45;&gt;record</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M588,-939.23C588,-939.23 588,-896.45 588,-896.45"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="590.63,-896.45 588,-888.95 585.38,-896.45 590.63,-896.45"/>
+</g>
+<!-- probecheck -->
+<g id="node16" class="node">
+<title>probecheck</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M489.49,-791.05C489.49,-791.05 448.74,-768.61 448.74,-768.61 443.49,-765.71 443.49,-759.93 448.74,-757.03 448.74,-757.03 489.49,-734.59 489.49,-734.59 494.74,-731.69 505.26,-731.69 510.51,-734.59 510.51,-734.59 551.26,-757.03 551.26,-757.03 556.51,-759.93 556.51,-765.71 551.26,-768.61 551.26,-768.61 510.51,-791.05 510.51,-791.05 505.26,-793.95 494.74,-793.95 489.49,-791.05"/>
+<text text-anchor="middle" x="500" y="-764.57" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Probe after</text>
+<text text-anchor="middle" x="500" y="-753.32" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">this phase?</text>
+</g>
+<!-- record&#45;&gt;probecheck -->
+<g id="edge9" class="edge">
+<title>record&#45;&gt;probecheck</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M542.1,-849.43C542.1,-849.43 542.1,-783.29 542.1,-783.29"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="544.72,-783.29 542.1,-775.79 539.47,-783.29 544.72,-783.29"/>
+</g>
+<!-- save -->
+<g id="node18" class="node">
+<title>save</title>
+<path fill="#e1f6e5" stroke="#738096" stroke-width="1.1" d="M666.71,-545.4C666.71,-545.4 539.29,-545.4 539.29,-545.4 533.29,-545.4 527.29,-539.4 527.29,-533.4 527.29,-533.4 527.29,-520.5 527.29,-520.5 527.29,-514.5 533.29,-508.5 539.29,-508.5 539.29,-508.5 666.71,-508.5 666.71,-508.5 672.71,-508.5 678.71,-514.5 678.71,-520.5 678.71,-520.5 678.71,-533.4 678.71,-533.4 678.71,-539.4 672.71,-545.4 666.71,-545.4"/>
+<text text-anchor="middle" x="603" y="-528.7" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Append completed cell results</text>
+<text text-anchor="middle" x="603" y="-517.45" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">(thread&#45;safe write lock)</text>
+</g>
+<!-- record&#45;&gt;save -->
+<g id="edge19" class="edge">
+<title>record&#45;&gt;save</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M619.39,-849.45C619.39,-849.45 619.39,-554.97 619.39,-554.97"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="622.02,-554.97 619.39,-547.47 616.77,-554.97 622.02,-554.97"/>
+</g>
+<!-- probecheck&#45;&gt;phases -->
+<g id="edge12" class="edge">
+<title>probecheck&#45;&gt;phases</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M446.61,-767.88C446.61,-827.43 446.61,-1392 446.61,-1392 446.61,-1392 557.24,-1392 557.24,-1392"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="557.24,-1394.63 564.74,-1392 557.24,-1389.38 557.24,-1394.63"/>
+<text text-anchor="middle" x="775.25" y="-1084.31" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">no / next turn</text>
+</g>
+<!-- probe -->
+<g id="node17" class="node">
+<title>probe</title>
+<path fill="#ffe4a3" stroke="#738096" stroke-width="1.1" d="M573.21,-667.05C573.21,-667.05 448.8,-667.05 448.8,-667.05 442.8,-667.05 436.8,-661.05 436.8,-655.05 436.8,-655.05 436.8,-630.9 436.8,-630.9 436.8,-624.9 442.8,-618.9 448.8,-618.9 448.8,-618.9 573.21,-618.9 573.21,-618.9 579.21,-618.9 585.21,-624.9 585.21,-630.9 585.21,-630.9 585.21,-655.05 585.21,-655.05 585.21,-661.05 579.21,-667.05 573.21,-667.05"/>
+<text text-anchor="middle" x="511" y="-650.35" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Evaluator probe</text>
+<text text-anchor="middle" x="511" y="-639.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">score C, A1, A2 + confidence</text>
+<text text-anchor="middle" x="511" y="-627.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">stance + locus of change</text>
+</g>
+<!-- probecheck&#45;&gt;probe -->
+<g id="edge10" class="edge">
+<title>probecheck&#45;&gt;probe</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M500,-728.48C500,-728.48 500,-676.67 500,-676.67"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="502.63,-676.67 500,-669.17 497.38,-676.67 502.63,-676.67"/>
+<text text-anchor="middle" x="512.12" y="-694.25" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">yes</text>
+</g>
+<!-- probe&#45;&gt;phases -->
+<g id="edge11" class="edge">
+<title>probe&#45;&gt;phases</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M436.36,-643C425.55,-643 417.98,-643 417.98,-643 417.98,-643 417.98,-1394 417.98,-1394 417.98,-1394 557.19,-1394 557.19,-1394"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="557.19,-1396.63 564.69,-1394 557.19,-1391.38 557.19,-1396.63"/>
+<text text-anchor="middle" x="775.5" y="-1034.98" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#46556b">next phase</text>
+</g>
+<!-- probe&#45;&gt;save -->
+<g id="edge20" class="edge">
+<title>probe&#45;&gt;save</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M556.25,-618.65C556.25,-618.65 556.25,-555.13 556.25,-555.13"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="558.88,-555.13 556.25,-547.63 553.63,-555.13 558.88,-555.13"/>
+</g>
+<!-- csv -->
+<g id="node19" class="node">
+<title>csv</title>
+<path fill="#e1f6e5" stroke="#738096" stroke-width="1.1" d="M585.71,-455.5C585.71,-455.5 416.3,-455.5 416.3,-455.5 410.3,-455.5 404.3,-449.5 404.3,-443.5 404.3,-443.5 404.3,-430.6 404.3,-430.6 404.3,-424.6 410.3,-418.6 416.3,-418.6 416.3,-418.6 585.71,-418.6 585.71,-418.6 591.71,-418.6 597.71,-424.6 597.71,-430.6 597.71,-430.6 597.71,-443.5 597.71,-443.5 597.71,-449.5 591.71,-455.5 585.71,-455.5"/>
+<text text-anchor="middle" x="501" y="-438.8" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">belief_revision_results_full_crossed.csv</text>
+<text text-anchor="middle" x="501" y="-427.55" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Turn&#45;level rows + probe values</text>
+</g>
+<!-- save&#45;&gt;csv -->
+<g id="edge21" class="edge">
+<title>save&#45;&gt;csv</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M562.5,-508.32C562.5,-508.32 562.5,-465.2 562.5,-465.2"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="565.13,-465.2 562.5,-457.7 559.88,-465.2 565.13,-465.2"/>
+</g>
+<!-- jsonl -->
+<g id="node20" class="node">
+<title>jsonl</title>
+<path fill="#e1f6e5" stroke="#738096" stroke-width="1.1" d="M761.58,-455.5C761.58,-455.5 636.42,-455.5 636.42,-455.5 630.42,-455.5 624.42,-449.5 624.42,-443.5 624.42,-443.5 624.42,-430.6 624.42,-430.6 624.42,-424.6 630.42,-418.6 636.42,-418.6 636.42,-418.6 761.58,-418.6 761.58,-418.6 767.58,-418.6 773.58,-424.6 773.58,-430.6 773.58,-430.6 773.58,-443.5 773.58,-443.5 773.58,-449.5 767.58,-455.5 761.58,-455.5"/>
+<text text-anchor="middle" x="699" y="-438.8" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">dialogues_full_crossed.jsonl</text>
+<text text-anchor="middle" x="699" y="-427.55" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Full dialogues + run metadata</text>
+</g>
+<!-- save&#45;&gt;jsonl -->
+<g id="edge22" class="edge">
+<title>save&#45;&gt;jsonl</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M651.56,-508.32C651.56,-508.32 651.56,-465.2 651.56,-465.2"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="654.19,-465.2 651.56,-457.7 648.94,-465.2 654.19,-465.2"/>
+</g>
+<!-- prepare -->
+<g id="node21" class="node">
+<title>prepare</title>
+<path fill="#e2eefc" stroke="#738096" stroke-width="1.1" d="M559.83,-345.1C559.83,-345.1 442.17,-345.1 442.17,-345.1 436.17,-345.1 430.17,-339.1 430.17,-333.1 430.17,-333.1 430.17,-320.2 430.17,-320.2 430.17,-314.2 436.17,-308.2 442.17,-308.2 442.17,-308.2 559.83,-308.2 559.83,-308.2 565.83,-308.2 571.83,-314.2 571.83,-320.2 571.83,-320.2 571.83,-333.1 571.83,-333.1 571.83,-339.1 565.83,-345.1 559.83,-345.1"/>
+<text text-anchor="middle" x="501" y="-328.4" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Load, type, filter probe rows</text>
+<text text-anchor="middle" x="501" y="-317.15" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Build conversation IDs</text>
+</g>
+<!-- csv&#45;&gt;prepare -->
+<g id="edge23" class="edge">
+<title>csv&#45;&gt;prepare</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M501,-418.32C501,-418.32 501,-354.71 501,-354.71"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="503.63,-354.71 501,-347.21 498.38,-354.71 503.63,-354.71"/>
+</g>
+<!-- summary -->
+<g id="node22" class="node">
+<title>summary</title>
+<path fill="#e2eefc" stroke="#738096" stroke-width="1.1" d="M560.58,-255.2C560.58,-255.2 441.42,-255.2 441.42,-255.2 435.42,-255.2 429.42,-249.2 429.42,-243.2 429.42,-243.2 429.42,-230.3 429.42,-230.3 429.42,-224.3 435.42,-218.3 441.42,-218.3 441.42,-218.3 560.58,-218.3 560.58,-218.3 566.58,-218.3 572.58,-224.3 572.58,-230.3 572.58,-230.3 572.58,-243.2 572.58,-243.2 572.58,-249.2 566.58,-255.2 560.58,-255.2"/>
+<text text-anchor="middle" x="501" y="-238.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Build sample&#45;level summary</text>
+<text text-anchor="middle" x="501" y="-227.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">start/end beliefs + deltas</text>
+</g>
+<!-- prepare&#45;&gt;summary -->
+<g id="edge24" class="edge">
+<title>prepare&#45;&gt;summary</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M501,-308.02C501,-308.02 501,-264.9 501,-264.9"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="503.63,-264.9 501,-257.4 498.38,-264.9 503.63,-264.9"/>
+</g>
+<!-- stats -->
+<g id="node23" class="node">
+<title>stats</title>
+<path fill="#e2eefc" stroke="#738096" stroke-width="1.1" d="M472.58,-165.3C472.58,-165.3 335.42,-165.3 335.42,-165.3 329.42,-165.3 323.42,-159.3 323.42,-153.3 323.42,-153.3 323.42,-129.15 323.42,-129.15 323.42,-123.15 329.42,-117.15 335.42,-117.15 335.42,-117.15 472.58,-117.15 472.58,-117.15 478.58,-117.15 484.58,-123.15 484.58,-129.15 484.58,-129.15 484.58,-153.3 484.58,-153.3 484.58,-159.3 478.58,-165.3 472.58,-165.3"/>
+<text text-anchor="middle" x="404" y="-148.6" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Statistical analyses</text>
+<text text-anchor="middle" x="404" y="-137.35" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">paired effects · RQ1 contrasts</text>
+<text text-anchor="middle" x="404" y="-126.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">OLS · mixed models · crosstabs</text>
+</g>
+<!-- summary&#45;&gt;stats -->
+<g id="edge25" class="edge">
+<title>summary&#45;&gt;stats</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M457,-217.88C457,-217.88 457,-174.74 457,-174.74"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="459.63,-174.74 457,-167.24 454.38,-174.74 459.63,-174.74"/>
+</g>
+<!-- plots -->
+<g id="node24" class="node">
+<title>plots</title>
+<path fill="#e2eefc" stroke="#738096" stroke-width="1.1" d="M672.58,-165.3C672.58,-165.3 523.42,-165.3 523.42,-165.3 517.42,-165.3 511.42,-159.3 511.42,-153.3 511.42,-153.3 511.42,-129.15 511.42,-129.15 511.42,-123.15 517.42,-117.15 523.42,-117.15 523.42,-117.15 672.58,-117.15 672.58,-117.15 678.58,-117.15 684.58,-123.15 684.58,-129.15 684.58,-129.15 684.58,-153.3 684.58,-153.3 684.58,-159.3 678.58,-165.3 672.58,-165.3"/>
+<text text-anchor="middle" x="598" y="-148.6" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">Visual analyses</text>
+<text text-anchor="middle" x="598" y="-137.35" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">trajectories · stance · change locus</text>
+<text text-anchor="middle" x="598" y="-126.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">factor&#45;specific core vs auxiliary</text>
+</g>
+<!-- summary&#45;&gt;plots -->
+<g id="edge27" class="edge">
+<title>summary&#45;&gt;plots</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M542,-217.88C542,-217.88 542,-174.74 542,-174.74"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="544.63,-174.74 542,-167.24 539.38,-174.74 544.63,-174.74"/>
+</g>
+<!-- artifacts -->
+<g id="node25" class="node">
+<title>artifacts</title>
+<path fill="#e2eefc" stroke="#738096" stroke-width="1.1" d="M564.33,-64.15C564.33,-64.15 437.67,-64.15 437.67,-64.15 431.67,-64.15 425.67,-58.15 425.67,-52.15 425.67,-52.15 425.67,-28 425.67,-28 425.67,-22 431.67,-16 437.67,-16 437.67,-16 564.33,-16 564.33,-16 570.33,-16 576.33,-22 576.33,-28 576.33,-28 576.33,-52.15 576.33,-52.15 576.33,-58.15 570.33,-64.15 564.33,-64.15"/>
+<text text-anchor="middle" x="501" y="-47.45" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">output_full_crossed/paper_v3/</text>
+<text text-anchor="middle" x="501" y="-36.2" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">CSV tables · TXT summaries</text>
+<text text-anchor="middle" x="501" y="-24.95" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#172033">PNG/PDF figures</text>
+</g>
+<!-- stats&#45;&gt;artifacts -->
+<g id="edge26" class="edge">
+<title>stats&#45;&gt;artifacts</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M455.12,-116.74C455.12,-116.74 455.12,-73.58 455.12,-73.58"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="457.75,-73.58 455.13,-66.08 452.5,-73.58 457.75,-73.58"/>
+</g>
+<!-- plots&#45;&gt;artifacts -->
+<g id="edge28" class="edge">
+<title>plots&#45;&gt;artifacts</title>
+<path fill="none" stroke="#607087" stroke-width="1.15" d="M543.88,-116.74C543.88,-116.74 543.88,-73.58 543.88,-73.58"/>
+<polygon fill="#607087" stroke="#607087" stroke-width="1.15" points="546.5,-73.58 543.88,-66.08 541.25,-73.58 546.5,-73.58"/>
+</g>
+</g>
+</svg>
