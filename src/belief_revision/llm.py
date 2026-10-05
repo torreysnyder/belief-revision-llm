@@ -1,13 +1,12 @@
 """Remote language-model inference through NDIF."""
 
-from functools import lru_cache
 import os
 import random
 import time
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from nnsight import LanguageModel
-
 
 load_dotenv()
 
@@ -34,14 +33,10 @@ def prepare_messages_for_model(
     # TEMPORARY GEMMA SMOKE-TEST SUPPORT: Gemma's chat template rejects the
     # system role, so preserve that content inside the first user message.
     system_text = "\n\n".join(
-        message["content"]
-        for message in messages
-        if message["role"] == "system"
+        message["content"] for message in messages if message["role"] == "system"
     )
     compatible_messages = [
-        message.copy()
-        for message in messages
-        if message["role"] != "system"
+        message.copy() for message in messages if message["role"] != "system"
     ]
 
     if not system_text:
@@ -59,9 +54,7 @@ def require_ndif_key() -> None:
     """Raise a clear error when NDIF authentication is not configured."""
 
     if not os.getenv("NDIF_API_KEY"):
-        raise RuntimeError(
-            "NDIF_API_KEY is missing. Add it to the local .env file."
-        )
+        raise RuntimeError("NDIF_API_KEY is missing. Add it to the local .env file.")
 
 
 @lru_cache(maxsize=None)
@@ -70,6 +63,7 @@ def get_model(model_name: str) -> LanguageModel:
 
     require_ndif_key()
     return LanguageModel(model_name)
+
 
 def build_chat_prompt(
     model: LanguageModel,
@@ -88,22 +82,22 @@ def build_chat_prompt(
         )
     else:
         formatted_messages = [
-            f"{message['role'].upper()}:\n{message['content']}"
-            for message in messages
+            f"{message['role'].upper()}:\n{message['content']}" for message in messages
         ]
         prompt = "\n\n".join(formatted_messages) + "\n\nASSISTANT:\n"
 
     # TEMPORARY FULL-FLOW SMOKE TEST: accumulated dialogue exceeds NDIF's
     # per-job attention-memory limit. Keep the instructions and newest context.
-#    if len(prompt) > SMOKE_TEST_MAX_PROMPT_CHARS:
-#        half_limit = SMOKE_TEST_MAX_PROMPT_CHARS // 2
-#        prompt = (
-#            prompt[:half_limit]
-#            + "\n\n[OLDER CONTEXT OMITTED FOR SMOKE TEST]\n\n"
-#            + prompt[-half_limit:]
-#        )
+    #    if len(prompt) > SMOKE_TEST_MAX_PROMPT_CHARS:
+    #        half_limit = SMOKE_TEST_MAX_PROMPT_CHARS // 2
+    #        prompt = (
+    #            prompt[:half_limit]
+    #            + "\n\n[OLDER CONTEXT OMITTED FOR SMOKE TEST]\n\n"
+    #            + prompt[-half_limit:]
+    #        )
 
     return prompt
+
 
 def generate_remote(
     model_name: str,
@@ -118,7 +112,7 @@ def generate_remote(
 
     # TEMPORARY FULL-FLOW SMOKE TEST: this deliberately overrides larger
     # per-call limits without changing the intended experiment settings.
-#    max_tokens = min(max_tokens, SMOKE_TEST_MAX_TOKENS)
+    #    max_tokens = min(max_tokens, SMOKE_TEST_MAX_TOKENS)
 
     prompt_length = model.tokenizer(
         prompt,
@@ -134,9 +128,9 @@ def generate_remote(
         generation_options["temperature"] = temperature
 
     with model.generate(
-            prompt,
-            remote=True,
-            **generation_options,
+        prompt,
+        remote=True,
+        **generation_options,
     ):
         output_tokens = model.generator.output.save()
 
@@ -146,6 +140,7 @@ def generate_remote(
         generated_tokens,
         skip_special_tokens=True,
     ).strip()
+
 
 NON_RETRYABLE_ERRORS = (
     "not pinned",
@@ -162,10 +157,8 @@ def is_retryable_error(error: Exception) -> bool:
 
     message = str(error).lower()
 
-    return not any(
-        marker in message
-        for marker in NON_RETRYABLE_ERRORS
-    )
+    return not any(marker in message for marker in NON_RETRYABLE_ERRORS)
+
 
 def call_model(
     model_name: str,
@@ -188,7 +181,7 @@ def call_model(
             if not is_retryable_error(error) or attempt == retries - 1:
                 raise
 
-            delay = (2 ** attempt) + random.random()
+            delay = (2**attempt) + random.random()
             time.sleep(delay)
 
     raise RuntimeError("NDIF generation failed without returning a response.")

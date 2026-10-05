@@ -37,16 +37,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--csv-output",
         type=Path,
-        default=Path(
-            "belief_revision_results_full_crossed.csv"
-        ),
+        default=Path("belief_revision_results_full_crossed.csv"),
     )
     parser.add_argument(
         "--jsonl-output",
         type=Path,
-        default=Path(
-            "dialogues_full_crossed.jsonl"
-        ),
+        default=Path("dialogues_full_crossed.jsonl"),
     )
     parser.add_argument(
         "--replicates-per-cell",
@@ -74,8 +70,7 @@ def parse_args() -> argparse.Namespace:
         default=False,
         metavar="{true,false}",
         help=(
-            "Upload completed records to Supabase in addition to "
-            "writing local files."
+            "Upload completed records to Supabase in addition to writing local files."
         ),
     )
 
@@ -87,21 +82,9 @@ def main() -> None:
 
     args = parse_args()
 
-    replicates_per_cell = (
-        1
-        if args.single_run
-        else args.replicates_per_cell
-    )
-    max_workers = (
-        1
-        if args.single_run
-        else args.max_workers
-    )
-    max_cells = (
-        1
-        if args.single_run
-        else args.max_cells
-    )
+    replicates_per_cell = 1 if args.single_run else args.replicates_per_cell
+    max_workers = 1 if args.single_run else args.max_workers
+    max_cells = 1 if args.single_run else args.max_cells
 
     vignettes = load_vignettes(args.vignettes)
 

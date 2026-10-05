@@ -147,6 +147,21 @@ provide checkpoint/resume support. Individual replicate failures are reported
 and skipped; local and Supabase writes occur after all replicates for a primary
 cell have finished.
 
+## Development checks
+
+Install the locked development tools with `uv sync`, then run:
+
+```bash
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+```
+
+The pytest configuration enforces 100% statement and branch coverage across
+the migrated `src/belief_revision/` package and operational `scripts/`. Unit
+tests mock NDIF and Supabase integrations, so the suite does not submit paid
+inference jobs or modify live reporting data.
+
 ## NDIF setup
 
 1. Go to the [NDIF get-started page](https://ndif.us/get-started/).

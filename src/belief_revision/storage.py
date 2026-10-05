@@ -9,7 +9,6 @@ from typing import Any
 
 from .models import Auxiliary, ConversationResult, EvidenceItem, Vignette
 
-
 WRITE_LOCK = threading.Lock()
 
 
@@ -20,26 +19,17 @@ def parse_vignette(raw: dict[str, Any]) -> Vignette:
         id=raw["id"],
         domain=raw["domain"],
         core_claim=raw["core_claim"],
-        auxiliaries=[
-            Auxiliary(**item)
-            for item in raw["auxiliaries"]
-        ],
+        auxiliaries=[Auxiliary(**item) for item in raw["auxiliaries"]],
         core_evidence_disconfirming=[
-            EvidenceItem(**item)
-            for item in raw["core_evidence_disconfirming"]
+            EvidenceItem(**item) for item in raw["core_evidence_disconfirming"]
         ],
         core_evidence_supporting=[
-            EvidenceItem(**item)
-            for item in raw["core_evidence_supporting"]
+            EvidenceItem(**item) for item in raw["core_evidence_supporting"]
         ],
         core_evidence_ambiguous=[
-            EvidenceItem(**item)
-            for item in raw["core_evidence_ambiguous"]
+            EvidenceItem(**item) for item in raw["core_evidence_ambiguous"]
         ],
-        auxiliary_evidence=[
-            EvidenceItem(**item)
-            for item in raw["auxiliary_evidence"]
-        ],
+        auxiliary_evidence=[EvidenceItem(**item) for item in raw["auxiliary_evidence"]],
     )
 
 
@@ -51,10 +41,7 @@ def load_vignettes(
     with Path(path).open("r", encoding="utf-8") as file:
         raw_vignettes = json.load(file)["vignettes"]
 
-    return [
-        parse_vignette(raw)
-        for raw in raw_vignettes
-    ]
+    return [parse_vignette(raw) for raw in raw_vignettes]
 
 
 def build_conversation_record(
@@ -67,20 +54,12 @@ def build_conversation_record(
         "replicate_index": result.run_plan.replicate_index,
         "seed": result.run_plan.seed,
         "vignette_id": result.primary_cell.vignette.id,
-        "style_profile": asdict(
-            result.primary_cell.style_profile
-        ),
+        "style_profile": asdict(result.primary_cell.style_profile),
         "primary_cell": asdict(result.primary_cell),
         "run_plan": asdict(result.run_plan),
         "aux_mapping": result.aux_mapping,
-        "dialogue_history": [
-            asdict(turn)
-            for turn in result.dialogue_history
-        ],
-        "probe_outputs": [
-            asdict(probe)
-            for probe in result.probe_outputs
-        ],
+        "dialogue_history": [asdict(turn) for turn in result.dialogue_history],
+        "probe_outputs": [asdict(probe) for probe in result.probe_outputs],
         "rows": result.result_rows,
     }
 
@@ -99,10 +78,7 @@ def save_results_append(
     csv_path = Path(csv_path)
     jsonl_path = Path(jsonl_path)
 
-    records = [
-        build_conversation_record(result)
-        for result in results
-    ]
+    records = [build_conversation_record(result) for result in results]
 
     with WRITE_LOCK:
         with jsonl_path.open(
@@ -118,9 +94,7 @@ def save_results_append(
                     + "\n"
                 )
 
-        fieldnames = list(
-            results[0].result_rows[0].keys()
-        )
+        fieldnames = list(results[0].result_rows[0].keys())
 
         mode = "w" if write_header else "a"
 

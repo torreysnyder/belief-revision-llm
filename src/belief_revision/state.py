@@ -1,8 +1,9 @@
-import re
 import random
+import re
 
 from .config import BELIEF_ANCHOR_MAP
 from .models import EvidenceItem, UserState, Vignette
+
 
 def init_user_state(
     initial_affect: str,
@@ -27,6 +28,7 @@ def init_user_state(
         belief_anchor_level=belief_anchor_level,
     )
 
+
 def update_user_state(
     rng: random.Random,
     user_state: UserState,
@@ -48,9 +50,7 @@ def update_user_state(
                 45,
                 user_state.belief_core - rng.randint(4, 10),
             )
-            user_state.affect = rng.choice(
-                ["uneasy", "defensive", "conflicted"]
-            )
+            user_state.affect = rng.choice(["uneasy", "defensive", "conflicted"])
 
         elif evidence_item and evidence_item.strength == "moderate":
             user_state.confidence_core = max(
@@ -61,9 +61,7 @@ def update_user_state(
                 50,
                 user_state.belief_core - rng.randint(2, 6),
             )
-            user_state.affect = rng.choice(
-                ["uneasy", "defensive", "annoyed"]
-            )
+            user_state.affect = rng.choice(["uneasy", "defensive", "annoyed"])
 
     elif evidence_role == "core_supporting":
         user_state.confidence_core = min(
@@ -74,9 +72,7 @@ def update_user_state(
             95,
             user_state.belief_core + rng.randint(1, 4),
         )
-        user_state.affect = rng.choice(
-            ["validated", "curious", "still_uncertain"]
-        )
+        user_state.affect = rng.choice(["validated", "curious", "still_uncertain"])
 
     elif evidence_role == "core_ambiguous":
         user_state.confidence_core = min(
@@ -87,9 +83,7 @@ def update_user_state(
             92,
             user_state.belief_core + rng.randint(0, 2),
         )
-        user_state.affect = rng.choice(
-            ["validated", "suspicious", "curious"]
-        )
+        user_state.affect = rng.choice(["validated", "suspicious", "curious"])
 
     elif evidence_role == "auxiliary" and evidence_item:
         targets = evidence_item.targets or []
@@ -106,11 +100,10 @@ def update_user_state(
                 user_state.belief_A2 - rng.randint(3, 10),
             )
 
-        user_state.affect = rng.choice(
-            ["cautious", "uneasy", "reflective"]
-        )
+        user_state.affect = rng.choice(["cautious", "uneasy", "reflective"])
 
     return user_state
+
 
 def auxiliary_invoked_in_text(
     text: str,
@@ -127,20 +120,15 @@ def auxiliary_invoked_in_text(
     for auxiliary in vignette.auxiliaries:
         auxiliary_text = auxiliary.text.lower()
 
-        keywords = set(
-            re.findall(r"[a-z]{5,}", auxiliary_text)
-        )
+        keywords = set(re.findall(r"[a-z]{5,}", auxiliary_text))
 
-        overlap = sum(
-            1
-            for keyword in keywords
-            if keyword in normalized_text
-        )
+        overlap = sum(1 for keyword in keywords if keyword in normalized_text)
 
         if overlap >= 2:
             invoked_auxiliaries.append(auxiliary.id)
 
     return sorted(set(invoked_auxiliaries))
+
 
 def activate_mentioned_auxiliaries(
     user_state: UserState,
@@ -161,9 +149,6 @@ def activate_mentioned_auxiliaries(
     for auxiliary in vignette.auxiliaries:
         if (
             auxiliary.id in invoked_auxiliaries
-            and auxiliary.text
-            not in user_state.active_auxiliary_texts
+            and auxiliary.text not in user_state.active_auxiliary_texts
         ):
-            user_state.active_auxiliary_texts.append(
-                auxiliary.text
-            )
+            user_state.active_auxiliary_texts.append(auxiliary.text)

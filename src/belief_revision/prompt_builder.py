@@ -13,7 +13,6 @@ from typing import Any
 
 from .models import PromptTemplate
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
@@ -48,9 +47,7 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
 
     json_indent = context.get("_json_indent")
     variables = {
-        name: value
-        for name, value in context.items()
-        if not name.startswith("_")
+        name: value for name, value in context.items() if not name.startswith("_")
     }
 
     for name, value in context.items():
@@ -77,9 +74,7 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
     user_state = context.get("user_state")
     if user_state is not None:
         variables.update(asdict(user_state))
-        variables["active_auxiliaries_json"] = _to_json(
-            user_state.active_auxiliaries
-        )
+        variables["active_auxiliaries_json"] = _to_json(user_state.active_auxiliaries)
 
     style_profile = context.get("style_profile")
     if style_profile is not None:
@@ -108,27 +103,26 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
 
     evidence_item = context.get("evidence_item")
     variables["evidence_text"] = (
-        evidence_item.text
-        if evidence_item is not None
-        else "None"
+        evidence_item.text if evidence_item is not None else "None"
     )
 
     return variables
+
 
 def load_prompt_text(template: PromptTemplate) -> str:
     """Load a prompt template from its Markdown file."""
 
     if not template.template_path.is_file():
-        raise FileNotFoundError(
-            f"Prompt template not found: {template.template_path}"
-        )
+        raise FileNotFoundError(f"Prompt template not found: {template.template_path}")
 
     return template.template_path.read_text(encoding="utf-8").strip()
+
 
 def find_prompt_variables(prompt_text: str) -> set[str]:
     """Return the variable names referenced by a prompt template."""
 
     return set(PLACEHOLDER_PATTERN.findall(prompt_text))
+
 
 def validate_prompt_template(template: PromptTemplate) -> str:
     """Validate the template metadata and return its prompt text."""
@@ -149,6 +143,7 @@ def validate_prompt_template(template: PromptTemplate) -> str:
 
     return prompt_text
 
+
 def render_prompt(
     template: PromptTemplate,
     variables: dict[str, object] | None = None,
@@ -168,9 +163,7 @@ def render_prompt(
 
     missing = required - supplied
     if missing:
-        raise ValueError(
-            f"Missing variables for {template.name}: {sorted(missing)}"
-        )
+        raise ValueError(f"Missing variables for {template.name}: {sorted(missing)}")
 
     return PLACEHOLDER_PATTERN.sub(
         lambda match: str(variables[match.group(1)]),

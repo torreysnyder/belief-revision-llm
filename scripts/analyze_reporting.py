@@ -3,10 +3,8 @@
 from collections import Counter
 from typing import Any
 
-from supabase import Client
-
 from belief_revision.reporting import create_reporting_client
-
+from supabase import Client
 
 TABLES = {
     "runs": "experiment_runs",
@@ -20,11 +18,7 @@ TABLES = {
 def count_rows(client: Client, table: str) -> int:
     """Return an exact row count without downloading table contents."""
 
-    response = (
-        client.table(table)
-        .select("id", count="exact", head=True)
-        .execute()
-    )
+    response = client.table(table).select("id", count="exact", head=True).execute()
     return response.count or 0
 
 
@@ -61,27 +55,18 @@ def format_breakdown(values: Counter[str]) -> str:
     if not values:
         return "none"
 
-    return ", ".join(
-        f"{name}={count}"
-        for name, count in sorted(values.items())
-    )
+    return ", ".join(f"{name}={count}" for name, count in sorted(values.items()))
 
 
 def main() -> None:
     """Query Supabase and print the current experiment summary."""
 
     client = create_reporting_client()
-    counts = {
-        label: count_rows(client, table)
-        for label, table in TABLES.items()
-    }
+    counts = {label: count_rows(client, table) for label, table in TABLES.items()}
     runs = fetch_all(
         client,
         "experiment_runs",
-        (
-            "status,started_at,target_model,user_sim_model,"
-            "evaluator_model"
-        ),
+        ("status,started_at,target_model,user_sim_model,evaluator_model"),
     )
     conversations = fetch_all(
         client,
@@ -90,14 +75,10 @@ def main() -> None:
     )
 
     run_statuses = Counter(row["status"] for row in runs)
-    conversation_statuses = Counter(
-        row["status"] for row in conversations
-    )
+    conversation_statuses = Counter(row["status"] for row in conversations)
     target_models = Counter(row["target_model"] for row in runs)
     user_models = Counter(row["user_sim_model"] for row in runs)
-    evaluator_models = Counter(
-        row["evaluator_model"] for row in runs
-    )
+    evaluator_models = Counter(row["evaluator_model"] for row in runs)
     data_points = counts["turns"] + counts["probes"]
 
     print("Supabase reporting summary")
@@ -108,22 +89,12 @@ def main() -> None:
     print(f"Artifacts: {counts['artifacts']}")
     print(f"Data points (turns + probes): {data_points}")
     print(f"Run statuses: {format_breakdown(run_statuses)}")
-    print(
-        "Conversation statuses: "
-        f"{format_breakdown(conversation_statuses)}"
-    )
+    print(f"Conversation statuses: {format_breakdown(conversation_statuses)}")
     print(f"Target models: {format_breakdown(target_models)}")
     print(f"User models: {format_breakdown(user_models)}")
-    print(
-        "Evaluator models: "
-        f"{format_breakdown(evaluator_models)}"
-    )
+    print(f"Evaluator models: {format_breakdown(evaluator_models)}")
 
-    started_at = sorted(
-        row["started_at"]
-        for row in runs
-        if row.get("started_at")
-    )
+    started_at = sorted(row["started_at"] for row in runs if row.get("started_at"))
     if started_at:
         print(f"First run: {started_at[0]}")
         print(f"Latest run: {started_at[-1]}")

@@ -5,7 +5,6 @@ import argparse
 from ..config import EVALUATOR_MODEL, TARGET_MODEL, USER_SIM_MODEL
 from ..llm import call_model
 
-
 CONFIGURED_MODELS = {
     "user": USER_SIM_MODEL,
     "assistant": TARGET_MODEL,
@@ -75,10 +74,7 @@ def main() -> None:
         else [(args.role, CONFIGURED_MODELS[args.role])]
     )
 
-    results = [
-        validate_model(role, model_name)
-        for role, model_name in selected_models
-    ]
+    results = [validate_model(role, model_name) for role, model_name in selected_models]
 
     if not all(results):
         raise SystemExit(1)

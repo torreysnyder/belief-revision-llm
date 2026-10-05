@@ -47,6 +47,31 @@ uv run validate-models --evaluator
 uv run validate-models --all
 ```
 
+## Run the automated tests and coverage check
+
+```bash
+uv run pytest
+```
+
+The project requires 100% statement and branch coverage for the migrated
+`src/belief_revision/` package and operational `scripts/`. Remote model and
+Supabase calls are mocked in the unit suite, so this command does not consume
+inference credits or write live data.
+
+## Run the Ruff linter and formatter
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
+
+Apply safe lint fixes and formatting with:
+
+```bash
+uv run ruff check --fix .
+uv run ruff format .
+```
+
 ## View the Supabase reporting summary
 
 ```bash

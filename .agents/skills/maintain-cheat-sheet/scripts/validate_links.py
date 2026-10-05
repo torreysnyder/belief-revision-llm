@@ -1,8 +1,7 @@
 """Validate repository-relative Markdown links in cheat_sheet.md."""
 
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = SKILL_DIR.parents[2]
@@ -23,9 +22,7 @@ def main() -> None:
             missing.append(target)
 
     if missing:
-        raise SystemExit(
-            "Missing cheat-sheet link targets: " + ", ".join(missing)
-        )
+        raise SystemExit("Missing cheat-sheet link targets: " + ", ".join(missing))
 
     print("All local cheat-sheet links resolve.")
 

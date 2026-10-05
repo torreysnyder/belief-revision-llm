@@ -29,3 +29,29 @@ package = true
 
 [tool.uv.build-backend]
 module-name = "belief_revision"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.10",
+]
+
+[tool.pytest.ini_options]
+addopts = "--cov=belief_revision --cov=scripts --cov-branch --cov-report=term-missing --cov-fail-under=100"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["belief_revision", "scripts"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+
+[tool.ruff]
+line-length = 88
+extend-exclude = ["analysis_full_crossed.py", "belief_revision_experiment.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

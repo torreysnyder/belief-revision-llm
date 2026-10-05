@@ -1,15 +1,30 @@
 import json
 import random
+from dataclasses import asdict
 from typing import Any
 
+from .config import EVALUATOR_MODEL, PHASES, TARGET_MODEL, USER_SIM_MODEL
+from .design import (
+    counterbalance_vignette,
+    phase_evidence_role,
+    select_evidence_by_condition,
+)
+from .llm import call_model
+from .models import (
+    BehavioralProbeResult,
+    ConversationResult,
+    DialogueTurn,
+    EvidenceItem,
+    PrimaryCell,
+    RunPlan,
+    StyleProfile,
+    UserState,
+    Vignette,
+)
 from .prompt_builder import render_prompt
 from .prompt_registry import PROMPT_TEMPLATES
 from .state import activate_mentioned_auxiliaries, init_user_state, update_user_state
-from .design import counterbalance_vignette, phase_evidence_role, select_evidence_by_condition
-from .models import BehavioralProbeResult, ConversationResult, DialogueTurn, EvidenceItem, PrimaryCell, RunPlan, StyleProfile, UserState, Vignette
-from .config import EVALUATOR_MODEL, PHASES, TARGET_MODEL, USER_SIM_MODEL
-from .llm import call_model
-from dataclasses import asdict
+
 
 def recent_dialogue(
     dialogue_history: list[DialogueTurn],
@@ -34,7 +49,6 @@ def parse_json_maybe(
     return parsed if isinstance(parsed, dict) else fallback
 
 
-
 def should_inject_auxiliary_evidence(
     user_state: UserState,
     planned_auxiliary_evidence: EvidenceItem | None,
@@ -44,17 +58,12 @@ def should_inject_auxiliary_evidence(
     if planned_auxiliary_evidence is None:
         return False
 
-    active_auxiliaries = set(
-        user_state.active_auxiliaries
-    )
+    active_auxiliaries = set(user_state.active_auxiliaries)
 
-    evidence_targets = set(
-        planned_auxiliary_evidence.targets or []
-    )
+    evidence_targets = set(planned_auxiliary_evidence.targets or [])
 
-    return bool(
-        active_auxiliaries.intersection(evidence_targets)
-    )
+    return bool(active_auxiliaries.intersection(evidence_targets))
+
 
 def choose_dialogue_act(
     rng: random.Random,
@@ -66,45 +75,57 @@ def choose_dialogue_act(
 
     if evidence_role == "core_disconfirming":
         if conversation_goal == "challenge":
-            return rng.choice([
-                "push_back",
-                "ask_if_still_possible",
-                "resist_evidence",
-            ])
+            return rng.choice(
+                [
+                    "push_back",
+                    "ask_if_still_possible",
+                    "resist_evidence",
+                ]
+            )
 
         if conversation_goal == "reassurance":
-            return rng.choice([
-                "seek_reassurance",
+            return rng.choice(
+                [
+                    "seek_reassurance",
+                    "wobble_after_evidence",
+                    "ask_if_still_possible",
+                ]
+            )
+
+        return rng.choice(
+            [
+                "resist_evidence",
                 "wobble_after_evidence",
                 "ask_if_still_possible",
-            ])
-
-        return rng.choice([
-            "resist_evidence",
-            "wobble_after_evidence",
-            "ask_if_still_possible",
-        ])
+            ]
+        )
 
     if evidence_role == "core_supporting":
-        return rng.choice([
-            "partial_reinforcement",
-            "connect_to_experience",
-            "claim_validation",
-        ])
+        return rng.choice(
+            [
+                "partial_reinforcement",
+                "connect_to_experience",
+                "claim_validation",
+            ]
+        )
 
     if evidence_role == "core_ambiguous":
-        return rng.choice([
-            "tentative_support",
-            "suspicion",
-            "connect_to_experience",
-        ])
+        return rng.choice(
+            [
+                "tentative_support",
+                "suspicion",
+                "connect_to_experience",
+            ]
+        )
 
     if evidence_role == "auxiliary":
-        return rng.choice([
-            "reach_for_explanation",
-            "qualified_retreat",
-            "mechanism_focus",
-        ])
+        return rng.choice(
+            [
+                "reach_for_explanation",
+                "qualified_retreat",
+                "mechanism_focus",
+            ]
+        )
 
     if phase_name == "intro":
         intro_acts = {
@@ -118,23 +139,30 @@ def choose_dialogue_act(
             return rng.choice(intro_acts[conversation_goal])
 
     if "elaboration" in phase_name:
-        return rng.choice([
-            "brief_reflection",
-            "frustration",
-            "ask_mechanism",
-        ])
+        return rng.choice(
+            [
+                "brief_reflection",
+                "frustration",
+                "ask_mechanism",
+            ]
+        )
 
     if phase_name == "closing":
-        return rng.choice([
-            "residual_commitment",
-            "guarded_uncertainty",
-            "future_concern",
-        ])
+        return rng.choice(
+            [
+                "residual_commitment",
+                "guarded_uncertainty",
+                "future_concern",
+            ]
+        )
 
-    return rng.choice([
-        "brief_reflection",
-        "ask_followup",
-    ])
+    return rng.choice(
+        [
+            "brief_reflection",
+            "ask_followup",
+        ]
+    )
+
 
 def make_user_sim_system_prompt(
     vignette: Vignette,
@@ -150,6 +178,7 @@ def make_user_sim_system_prompt(
         user_state=user_state,
     )
 
+
 def make_target_system_prompt() -> str:
     """Load the target assistant's system prompt."""
 
@@ -158,6 +187,7 @@ def make_target_system_prompt() -> str:
         {},
     )
 
+
 def make_probe_system_prompt() -> str:
     """Load the behavioral evaluator's system prompt."""
 
@@ -165,6 +195,7 @@ def make_probe_system_prompt() -> str:
         PROMPT_TEMPLATES["behavioral_probe_system"],
         {},
     )
+
 
 def build_probe_user_prompt(
     vignette: Vignette,
@@ -182,6 +213,7 @@ def build_probe_user_prompt(
         previous_probe=previous_probe,
         _json_indent=2,
     )
+
 
 def parse_probe_json(
     probe_raw: str,
@@ -201,6 +233,7 @@ def parse_probe_json(
         phase=phase_name,
         **parsed,
     )
+
 
 def run_probe(
     vignette: Vignette,
@@ -237,6 +270,7 @@ def run_probe(
         phase_name,
     )
 
+
 def build_user_intro_core_prompt(
     vignette: Vignette,
     dialogue_history: list[DialogueTurn],
@@ -257,6 +291,7 @@ def build_user_intro_core_prompt(
         style_profile=style_profile,
         user_state=user_state,
     )
+
 
 def build_user_turn_planner_prompt(
     rng: random.Random,
@@ -297,6 +332,7 @@ def build_user_turn_planner_prompt(
         _json_indent=2,
     )
 
+
 def build_user_turn_realizer_prompt(
     plan: dict[str, Any],
     style_profile: StyleProfile,
@@ -314,6 +350,7 @@ def build_user_turn_realizer_prompt(
         ),
         _json_indent=2,
     )
+
 
 def generate_user_turn(
     rng: random.Random,
@@ -403,6 +440,7 @@ def generate_user_turn(
         max_tokens=180,
     )
 
+
 def probe_result_fields(
     probe: BehavioralProbeResult | None,
 ) -> dict[str, Any]:
@@ -429,6 +467,7 @@ def probe_result_fields(
     fields["probe_explanation"] = fields.pop("explanation")
 
     return fields
+
 
 def run_one_vignette(
     primary_cell: PrimaryCell,
@@ -483,11 +522,9 @@ def run_one_vignette(
         auxiliary_gate_passed = None
 
         if phase_name == "elaboration_2":
-            auxiliary_gate_passed = (
-                should_inject_auxiliary_evidence(
-                    user_state,
-                    evidence_item,
-                )
+            auxiliary_gate_passed = should_inject_auxiliary_evidence(
+                user_state,
+                evidence_item,
             )
 
             if not auxiliary_gate_passed:
@@ -495,24 +532,16 @@ def run_one_vignette(
 
         evidence_turn = (
             rng.randint(1, phase_turn_count - 1)
-            if evidence_item is not None
-            and phase_turn_count > 1
+            if evidence_item is not None and phase_turn_count > 1
             else None
         )
 
         for turn_index in range(phase_turn_count):
             global_turn_index += 1
 
-            inject_evidence = (
-                evidence_turn is not None
-                and turn_index == evidence_turn
-            )
+            inject_evidence = evidence_turn is not None and turn_index == evidence_turn
 
-            current_evidence = (
-                evidence_item
-                if inject_evidence
-                else None
-            )
+            current_evidence = evidence_item if inject_evidence else None
 
             evidence_role = phase_evidence_role(
                 phase_name,
@@ -552,25 +581,15 @@ def run_one_vignette(
                     global_turn_index=global_turn_index,
                     text=user_text,
                     inject_evidence=inject_evidence,
-                    evidence_id=(
-                        current_evidence.id
-                        if current_evidence
-                        else None
-                    ),
+                    evidence_id=(current_evidence.id if current_evidence else None),
                     evidence_role=evidence_role,
                     evidence_strength=(
-                        current_evidence.strength
-                        if current_evidence
-                        else None
+                        current_evidence.strength if current_evidence else None
                     ),
                     evidence_targets=(
-                        current_evidence.targets
-                        if current_evidence
-                        else None
+                        current_evidence.targets if current_evidence else None
                     ),
-                    active_auxiliaries=list(
-                        user_state.active_auxiliaries
-                    ),
+                    active_auxiliaries=list(user_state.active_auxiliaries),
                 )
             )
 
@@ -608,31 +627,19 @@ def run_one_vignette(
                     global_turn_index=global_turn_index,
                     text=assistant_text,
                     inject_evidence=inject_evidence,
-                    evidence_id=(
-                        current_evidence.id
-                        if current_evidence
-                        else None
-                    ),
+                    evidence_id=(current_evidence.id if current_evidence else None),
                     evidence_role=evidence_role,
                     evidence_strength=(
-                        current_evidence.strength
-                        if current_evidence
-                        else None
+                        current_evidence.strength if current_evidence else None
                     ),
                     evidence_targets=(
-                        current_evidence.targets
-                        if current_evidence
-                        else None
+                        current_evidence.targets if current_evidence else None
                     ),
-                    active_auxiliaries=list(
-                        user_state.active_auxiliaries
-                    ),
+                    active_auxiliaries=list(user_state.active_auxiliaries),
                 )
             )
 
-            canonical_to_display = aux_mapping[
-                "canonical_to_display"
-            ]
+            canonical_to_display = aux_mapping["canonical_to_display"]
 
             row = {
                 "cell_id": primary_cell.cell_id,
@@ -643,53 +650,30 @@ def run_one_vignette(
                 "turn_in_phase": turn_index + 1,
                 "global_turn_index": global_turn_index,
                 "inject_evidence": inject_evidence,
-                "evidence_id": (
-                    current_evidence.id
-                    if current_evidence
-                    else None
-                ),
+                "evidence_id": (current_evidence.id if current_evidence else None),
                 "evidence_role": evidence_role,
                 "evidence_strength": (
-                    current_evidence.strength
-                    if current_evidence
-                    else None
+                    current_evidence.strength if current_evidence else None
                 ),
                 "evidence_credibility": (
-                    current_evidence.credibility
-                    if current_evidence
-                    else None
+                    current_evidence.credibility if current_evidence else None
                 ),
                 "evidence_targets": (
                     json.dumps(current_evidence.targets)
-                    if current_evidence
-                    and current_evidence.targets
+                    if current_evidence and current_evidence.targets
                     else None
                 ),
-                "canonical_to_display_A1": (
-                    canonical_to_display["A1"]
-                ),
-                "canonical_to_display_A2": (
-                    canonical_to_display["A2"]
-                ),
-                "display_A1_text": aux_mapping[
-                    "display_A1_text"
-                ],
-                "display_A2_text": aux_mapping[
-                    "display_A2_text"
-                ],
-                "style_id": (
-                    primary_cell.style_profile.style_id
-                ),
+                "canonical_to_display_A1": (canonical_to_display["A1"]),
+                "canonical_to_display_A2": (canonical_to_display["A2"]),
+                "display_A1_text": aux_mapping["display_A1_text"],
+                "display_A2_text": aux_mapping["display_A2_text"],
+                "style_id": (primary_cell.style_profile.style_id),
                 "aux_gate_passed": auxiliary_gate_passed,
-                "active_auxiliaries": json.dumps(
-                    user_state.active_auxiliaries
-                ),
+                "active_auxiliaries": json.dumps(user_state.active_auxiliaries),
                 "user_turn": user_text,
                 "assistant_turn": assistant_text,
                 "user_affect": user_state.affect,
-                "user_confidence_core": (
-                    user_state.confidence_core
-                ),
+                "user_confidence_core": (user_state.confidence_core),
                 "user_belief_core": user_state.belief_core,
                 "probe_ran_after_turn": False,
                 **probe_result_fields(latest_probe),
@@ -707,9 +691,7 @@ def run_one_vignette(
 
             probe_outputs.append(latest_probe)
 
-            result_rows[-1].update(
-                probe_result_fields(latest_probe)
-            )
+            result_rows[-1].update(probe_result_fields(latest_probe))
             result_rows[-1]["probe_ran_after_turn"] = True
 
     return ConversationResult(

@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4, uuid5
 
 from dotenv import load_dotenv
+
 from supabase import Client, create_client
 
 from .models import ConversationResult
@@ -27,8 +28,7 @@ def create_reporting_client() -> Client:
 
     if not url or not secret_key:
         raise RuntimeError(
-            "Supabase access requires SUPABASE_URL and "
-            "SUPABASE_SECRET_KEY in .env."
+            "Supabase access requires SUPABASE_URL and SUPABASE_SECRET_KEY in .env."
         )
 
     return create_client(url, secret_key)
@@ -87,8 +87,7 @@ class SupabaseReporter:
                 )
             )
             result_rows = {
-                int(row["global_turn_index"]): row
-                for row in result.result_rows
+                int(row["global_turn_index"]): row for row in result.result_rows
             }
 
             conversation = {
@@ -99,9 +98,7 @@ class SupabaseReporter:
                 "seed": result.run_plan.seed,
                 "vignette_id": result.primary_cell.vignette.id,
                 "status": "running",
-                "style_profile": asdict(
-                    result.primary_cell.style_profile
-                ),
+                "style_profile": asdict(result.primary_cell.style_profile),
                 "primary_cell": asdict(result.primary_cell),
                 "run_plan": asdict(result.run_plan),
                 "aux_mapping": result.aux_mapping,
@@ -119,9 +116,7 @@ class SupabaseReporter:
             for turn in result.dialogue_history:
                 payload = asdict(turn)
                 if turn.speaker == "assistant":
-                    payload["result_row"] = result_rows.get(
-                        turn.global_turn_index
-                    )
+                    payload["result_row"] = result_rows.get(turn.global_turn_index)
 
                 turns.append(
                     {
@@ -138,9 +133,7 @@ class SupabaseReporter:
             if turns:
                 self.client.table("conversation_turns").upsert(
                     turns,
-                    on_conflict=(
-                        "conversation_id,global_turn_index,speaker"
-                    ),
+                    on_conflict=("conversation_id,global_turn_index,speaker"),
                 ).execute()
 
             probes = [

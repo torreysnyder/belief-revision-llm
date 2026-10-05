@@ -1,15 +1,17 @@
 """Experiment-cell construction, counterbalancing, and evidence selection."""
-import random
+
 import hashlib
+import random
+from dataclasses import replace
+
 from .config import (
     BELIEF_ANCHOR_LEVELS,
     CONVERSATION_GOALS,
+    INITIAL_AFFECT_BY_ANCHOR,
     STYLE_LIBRARY,
     TRUST_LEVELS,
-    INITIAL_AFFECT_BY_ANCHOR,
 )
-from .models import PrimaryCell, Vignette, RunPlan, EvidencePlan, EvidenceItem
-from dataclasses import replace
+from .models import EvidenceItem, EvidencePlan, PrimaryCell, RunPlan, Vignette
 
 
 def make_stable_seed(*parts: object) -> int:
@@ -18,6 +20,7 @@ def make_stable_seed(*parts: object) -> int:
     joined = "||".join(str(part) for part in parts)
     digest = hashlib.sha256(joined.encode("utf-8")).hexdigest()
     return int(digest[:8], 16)
+
 
 def build_primary_cells(vignettes: list[Vignette]) -> list[PrimaryCell]:
     """Build every combination of the primary experimental conditions."""
@@ -50,26 +53,21 @@ def build_primary_cells(vignettes: list[Vignette]) -> list[PrimaryCell]:
 
     return cells
 
+
 def build_run_plans(
     primary_cell: PrimaryCell,
     replicates_per_cell: int,
 ) -> list[RunPlan]:
     """Build deterministic replicate conditions for one primary cell."""
 
-    affect_pool = INITIAL_AFFECT_BY_ANCHOR[
-        primary_cell.belief_anchor_level
-    ]
+    affect_pool = INITIAL_AFFECT_BY_ANCHOR[primary_cell.belief_anchor_level]
 
     plans = []
 
     for replicate_index in range(replicates_per_cell):
-        aux_order_condition = (
-            "original" if replicate_index % 2 == 0 else "reversed"
-        )
+        aux_order_condition = "original" if replicate_index % 2 == 0 else "reversed"
 
-        initial_affect = affect_pool[
-            replicate_index % len(affect_pool)
-        ]
+        initial_affect = affect_pool[replicate_index % len(affect_pool)]
 
         core_order_condition = (
             "strong_then_moderate"
@@ -78,15 +76,11 @@ def build_run_plans(
         )
 
         elaboration_1_condition = (
-            "ambiguous"
-            if (replicate_index // 2) % 2 == 0
-            else "supporting"
+            "ambiguous" if (replicate_index // 2) % 2 == 0 else "supporting"
         )
 
         elaboration_2_target_condition = (
-            "A1"
-            if (replicate_index // 4) % 2 == 0
-            else "A2"
+            "A1" if (replicate_index // 4) % 2 == 0 else "A2"
         )
 
         seed = make_stable_seed(
@@ -114,13 +108,12 @@ def build_run_plans(
                 belief_anchor_level=primary_cell.belief_anchor_level,
                 core_order_condition=core_order_condition,
                 elaboration_1_condition=elaboration_1_condition,
-                elaboration_2_target_condition=(
-                    elaboration_2_target_condition
-                ),
+                elaboration_2_target_condition=(elaboration_2_target_condition),
             )
         )
 
     return plans
+
 
 def counterbalance_vignette(
     vignette: Vignette,
@@ -136,14 +129,11 @@ def counterbalance_vignette(
             f"{len(original_auxiliaries)} in {vignette.id}"
         )
 
-    canonical_ids = [
-        auxiliary.id for auxiliary in original_auxiliaries
-    ]
+    canonical_ids = [auxiliary.id for auxiliary in original_auxiliaries]
 
     if canonical_ids != ["A1", "A2"]:
         raise ValueError(
-            f"Expected auxiliary ids ['A1', 'A2'], "
-            f"got {canonical_ids} in {vignette.id}"
+            f"Expected auxiliary ids ['A1', 'A2'], got {canonical_ids} in {vignette.id}"
         )
 
     if aux_order_condition == "original":
@@ -167,9 +157,7 @@ def counterbalance_vignette(
         }
 
     else:
-        raise ValueError(
-            f"Unknown aux_order_condition: {aux_order_condition}"
-        )
+        raise ValueError(f"Unknown aux_order_condition: {aux_order_condition}")
 
     def remap_targets(
         targets: list[str] | None,
@@ -177,10 +165,7 @@ def counterbalance_vignette(
         if not targets:
             return targets
 
-        return [
-            canonical_to_display.get(target, target)
-            for target in targets
-        ]
+        return [canonical_to_display.get(target, target) for target in targets]
 
     remapped_auxiliary_evidence = [
         replace(
@@ -197,8 +182,7 @@ def counterbalance_vignette(
     )
 
     display_to_canonical = {
-        display: canonical
-        for canonical, display in canonical_to_display.items()
+        display: canonical for canonical, display in canonical_to_display.items()
     }
 
     mapping = {
@@ -210,6 +194,7 @@ def counterbalance_vignette(
     }
 
     return counterbalanced_vignette, mapping
+
 
 def select_evidence_by_condition(
     vignette: Vignette,
@@ -260,18 +245,13 @@ def select_evidence_by_condition(
         evidence
         for evidence in vignette.auxiliary_evidence
         if evidence.targets
-        and run_plan.elaboration_2_target_condition
-        in evidence.targets
+        and run_plan.elaboration_2_target_condition in evidence.targets
     ]
 
     if not auxiliary_candidates:
         auxiliary_candidates = vignette.auxiliary_evidence
 
-    elaboration_2 = (
-        rng.choice(auxiliary_candidates)
-        if auxiliary_candidates
-        else None
-    )
+    elaboration_2 = rng.choice(auxiliary_candidates) if auxiliary_candidates else None
 
     return EvidencePlan(
         core_challenge_1=challenge_1,
@@ -279,6 +259,7 @@ def select_evidence_by_condition(
         elaboration_1=elaboration_1,
         elaboration_2=elaboration_2,
     )
+
 
 def phase_evidence_role(
     phase_name: str,

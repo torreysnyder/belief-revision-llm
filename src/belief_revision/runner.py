@@ -66,15 +66,9 @@ def run_primary_cell(
 
 def run_experiment(
     vignettes: list[Vignette],
-    csv_path: str | Path = (
-        "belief_revision_results_full_crossed.csv"
-    ),
-    jsonl_path: str | Path = (
-        "dialogues_full_crossed.jsonl"
-    ),
-    replicates_per_cell: int = (
-        REPLICATES_PER_PRIMARY_CELL
-    ),
+    csv_path: str | Path = ("belief_revision_results_full_crossed.csv"),
+    jsonl_path: str | Path = ("dialogues_full_crossed.jsonl"),
+    replicates_per_cell: int = (REPLICATES_PER_PRIMARY_CELL),
     max_workers: int = MAX_WORKERS,
     max_cells: int | None = None,
     reporting: bool = False,
@@ -98,15 +92,9 @@ def run_experiment(
         primary_cells = primary_cells[:max_cells]
 
     total_cells = len(primary_cells)
-    total_conversations = (
-        total_cells * replicates_per_cell
-    )
+    total_conversations = total_cells * replicates_per_cell
 
-    reporter = (
-        SupabaseReporter.from_environment()
-        if reporting
-        else None
-    )
+    reporter = SupabaseReporter.from_environment() if reporting else None
     reporting_run_id = (
         reporter.start_run(
             target_model=TARGET_MODEL,
@@ -126,14 +114,8 @@ def run_experiment(
     print(f"Loaded {len(vignettes)} vignettes.")
     print(f"Using {len(STYLE_LIBRARY)} style profiles.")
     print(f"Primary cells: {total_cells}")
-    print(
-        "Replicates per primary cell: "
-        f"{replicates_per_cell}"
-    )
-    print(
-        "Total conversations to generate: "
-        f"{total_conversations}"
-    )
+    print(f"Replicates per primary cell: {replicates_per_cell}")
+    print(f"Total conversations to generate: {total_conversations}")
 
     write_header = True
     completed_conversations = 0
@@ -174,8 +156,7 @@ def run_experiment(
             completed_conversations += len(cell_results)
 
             print(
-                f"  Saved {len(cell_results)} "
-                f"conversations for {primary_cell.cell_id}"
+                f"  Saved {len(cell_results)} conversations for {primary_cell.cell_id}"
             )
     except Exception as error:
         if reporter and reporting_run_id:
