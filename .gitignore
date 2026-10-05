@@ -20,6 +20,9 @@ env/
 .vscode/
 .DS_Store
 
+# Local throwaway files
+.tmp/
+
 # Generated experiment data and analysis outputs
 belief_revision_results_full_crossed.csv
 dialogues_full_crossed.jsonl

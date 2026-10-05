@@ -14,7 +14,18 @@ dependencies = [
     "scipy>=1.11",
     "seaborn>=0.13",
     "statsmodels>=0.14",
+    "supabase==2.32.0",
 ]
 
+[project.scripts]
+validate-models = "belief_revision.cli.validate_models:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
 [tool.uv]
-package = false
+package = true
+
+[tool.uv.build-backend]
+module-name = "belief_revision"

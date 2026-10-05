@@ -2,9 +2,12 @@
 
 from .models import StyleProfile
 
-TARGET_MODEL = "meta-llama/Llama-3.1-70B"#"openai/gpt-oss-120b"
-USER_SIM_MODEL = "meta-llama/Llama-3.1-70B"#"meta-llama/Llama-3.1-8B"
-EVALUATOR_MODEL = "meta-llama/Llama-3.1-70B"
+TARGET_MODEL = "Qwen/Qwen2.5-14B-Instruct"
+USER_SIM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+# TEMPORARY FULL-FLOW SMOKE TEST: Gemma exceeds NDIF's per-job memory limit
+# once the evaluator receives the accumulated dialogue. Restore Gemma after
+# validating the mechanics or receiving a larger Pilot allocation.
+EVALUATOR_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 
 REPLICATES_PER_PRIMARY_CELL = 12
 MAX_WORKERS = 20

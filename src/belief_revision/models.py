@@ -140,6 +140,7 @@ class ConversationResult:
     dialogue_history: list[DialogueTurn]
     probe_outputs: list[BehavioralProbeResult]
     result_rows: list[dict[str, object]]
+    aux_mapping: dict[str, object]
 
 @dataclass
 class PromptTemplate:

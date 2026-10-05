@@ -6,10 +6,14 @@ multi-turn conversation.
 
 ## Repository contents
 
-- `belief_revision_experiment.py` generates simulated conversations and probes
-  the target model's inferred stance at predefined checkpoints.
+- `scripts/run_experiment.py` runs the migrated NDIF-backed experiment and can
+  optionally upload completed records to Supabase.
+- `src/belief_revision/` contains the experiment design, conversation,
+  inference, storage, and reporting modules.
 - `analysis_full_crossed.py` analyzes the generated CSV and writes statistical
   tables, model summaries, and figures.
+- `scripts/analyze_reporting.py` prints a compact summary of data uploaded to
+  Supabase.
 - `vignettes_revised.json` defines the health and political belief-revision
   vignettes used by the experiment.
 
@@ -23,15 +27,13 @@ the analysis pipeline. Select the diagram to open the full-resolution version.
 
 ## Development status
 
-The operational entry points remain `belief_revision_experiment.py` and
-`analysis_full_crossed.py`; the run commands below are unchanged. An incremental
-restructure is being developed under `src/belief_revision/`. The shared models,
-experiment configuration, and deterministic design logic are currently
-implemented in `models.py`, `config.py`, and `design.py`. State helpers,
-file-backed prompt templates, prompt rendering, and an NDIF inference client
-are also under development. These modules are not yet connected into a complete
-replacement workflow; the remaining modules, scripts, and tests will be
-completed one component at a time.
+The migrated experiment entry point is `scripts/run_experiment.py`. It uses the
+modules under `src/belief_revision/` for deterministic design, conversation
+execution, NDIF inference, local storage, and optional Supabase reporting. The
+legacy `belief_revision_experiment.py` remains in the repository for reference.
+
+Intentional behavioral and functional changes from the legacy implementation
+are tracked in [`diff.md`](diff.md).
 
 ## Setup
 
@@ -53,8 +55,8 @@ Copy the environment template:
 cp sample.env .env
 ```
 
-For the legacy experiment, set `OPENAI_API_KEY`. For NDIF development, set
-`NDIF_API_KEY` and a Hugging Face read token in `HF_TOKEN`; the Hugging Face
+For the legacy experiment, set `OPENAI_API_KEY`. For the migrated experiment,
+set `NDIF_API_KEY` and a Hugging Face read token in `HF_TOKEN`; the Hugging Face
 token is needed to retrieve gated model configuration and tokenizer files.
 Accept the applicable model license on Hugging Face before testing a gated
 model. The resulting `.env` file is ignored by Git and must not be committed.
@@ -62,13 +64,21 @@ model. The resulting `.env` file is ignored by Git and must not be committed.
 ## Run the experiment
 
 ```bash
-uv run python belief_revision_experiment.py
+uv run python scripts/run_experiment.py --single-run
 ```
 
-The script currently uses `gpt-4.1-mini` for both the target assistant and user
-simulation. Its default full-crossed configuration runs many conversations and
-can incur substantial API usage. Review the model, replicate, and worker
-constants near the top of the script before starting a run.
+This runs one replicate from one primary cell and writes results locally. Model
+roles, replicate counts, and worker defaults are configured in
+`src/belief_revision/config.py`. Omit `--single-run` to run the full configured
+experiment:
+
+```bash
+uv run python scripts/run_experiment.py
+```
+
+The full configuration runs many conversations and submits live NDIF requests.
+Review the configured models, replicate count, and worker count before starting
+it.
 
 The experiment writes:
 
@@ -76,6 +86,47 @@ The experiment writes:
 - `dialogues_full_crossed.jsonl`
 
 These generated files are ignored by Git.
+
+### Optional Supabase reporting
+
+Local CSV and JSONL output remains the default. To also upload completed runs,
+conversations, turns, and behavioral probes to Supabase, set these server-side
+values in `.env`:
+
+```bash
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SECRET_KEY=your-server-side-secret-key
+```
+
+Do not expose or commit the secret key. The database schema is versioned under
+`supabase/migrations/`.
+
+Run locally without uploading:
+
+```bash
+uv run python scripts/run_experiment.py --single-run
+```
+
+Run the same test and upload its completed records:
+
+```bash
+uv run python scripts/run_experiment.py --single-run --reporting true
+```
+
+`--reporting false` is equivalent to omitting the flag. Local result files are
+written in either mode. The `experiment_artifacts` table reserves metadata for
+later chain-of-thought, activation, steering, and SAE outputs; large tensors or
+other binary artifacts should be stored outside Postgres and referenced by
+bucket and path.
+
+Print a basic summary of the uploaded data:
+
+```bash
+uv run python scripts/analyze_reporting.py
+```
+
+The summary includes run, conversation, turn, probe, and artifact counts;
+status and model breakdowns; and the first and latest run timestamps.
 
 ## Run the analysis
 
@@ -92,7 +143,9 @@ also ignored by Git.
 
 This is an early research codebase. Dependencies are declared in
 `pyproject.toml` and pinned in `uv.lock`. The experiment does not currently
-provide automated tests, command-line options, or checkpoint/resume support.
+provide checkpoint/resume support. Individual replicate failures are reported
+and skipped; local and Supabase writes occur after all replicates for a primary
+cell have finished.
 
 ## NDIF setup
 
@@ -102,9 +155,16 @@ provide automated tests, command-line options, or checkpoint/resume support.
 4. Create a Hugging Face read token and copy it into `HF_TOKEN` in `.env`.
 5. Accept the license for each gated Hugging Face model you plan to use.
 
-The modular NDIF client is not yet wired into the legacy operational entry
-points. NDIF model availability also depends on the current deployment status
-and the access level associated with the API key.
+The migrated entry point uses NDIF for all three model roles. Model availability
+depends on current deployment status and the access level associated with the
+API key.
+
+The behavioral evaluator receives the complete accumulated dialogue at each
+configured checkpoint. Long evaluator prompts can exceed NDIF's per-job memory
+allowance even without request batching. The temporary global response-token
+and prompt-length caps in `src/belief_revision/llm.py` are currently disabled;
+full-context runs may therefore require a larger NDIF allocation, a smaller
+evaluator, or a future evaluation path based on validated activation probes.
 
 ## Verify the NDIF setup
 
@@ -122,14 +182,18 @@ Confirm that NNsight is installed and importable:
 uv run python -c "import nnsight; print(nnsight.__version__)"
 ```
 
-Submit one remote generation using the target model configured in
+Submit one remote generation for each model role configured in
 `src/belief_revision/config.py`:
 
 ```bash
-PYTHONPATH=src uv run python -c "from belief_revision.config import TARGET_MODEL; from belief_revision.llm import call_model; result=call_model(TARGET_MODEL, [{'role':'user','content':'Reply with exactly: OK'}], temperature=0, max_tokens=10, retries=1); print('MODEL:', TARGET_MODEL); print('RESULT:', repr(result))"
+uv run validate-models --user
+uv run validate-models --assistant
+uv run validate-models --evaluator
+uv run validate-models --all
 ```
 
-The test passes when NDIF reports the job as `COMPLETED` and `RESULT` contains a
-non-empty response. The hosted base Llama models may not follow the request to
-return exactly `OK`; this command verifies connectivity and generation rather
-than instruction-following quality.
+Each test passes when NDIF reports the job as `COMPLETED` and the model returns
+a non-empty response. The hosted base models may not follow the request to
+return exactly `OK`; these commands verify connectivity and generation rather
+than instruction-following quality. These are live integration tests and are
+not part of the automatic unit-test suite.
