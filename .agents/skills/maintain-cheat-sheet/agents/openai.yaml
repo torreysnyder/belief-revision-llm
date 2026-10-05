@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Cheat Sheet"
+  short_description: "Keep project commands and links accurate"
+  default_prompt: "Review recent code changes and update cheat_sheet.md so its commands and links remain accurate and working."

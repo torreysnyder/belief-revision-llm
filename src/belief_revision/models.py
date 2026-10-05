@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+
 @dataclass
 class Auxiliary:
     """An auxiliary explanation associated with a vignette's core claim."""
@@ -8,6 +9,7 @@ class Auxiliary:
     id: str
     type: str
     text: str
+
 
 @dataclass
 class EvidenceItem:
@@ -18,6 +20,7 @@ class EvidenceItem:
     strength: str
     credibility: str | None = None
     targets: list[str] | None = None
+
 
 @dataclass
 class Vignette:
@@ -31,6 +34,7 @@ class Vignette:
     core_evidence_supporting: list[EvidenceItem]
     core_evidence_ambiguous: list[EvidenceItem]
     auxiliary_evidence: list[EvidenceItem]
+
 
 @dataclass
 class RunPlan:
@@ -46,6 +50,7 @@ class RunPlan:
     core_order_condition: str
     elaboration_1_condition: str
     elaboration_2_target_condition: str
+
 
 @dataclass
 class UserState:
@@ -65,6 +70,7 @@ class UserState:
     active_auxiliaries: list[str] = field(default_factory=list)
     active_auxiliary_texts: list[str] = field(default_factory=list)
 
+
 @dataclass
 class BehavioralProbeResult:
     """The evaluator's inferred assistant beliefs and stance at one probe."""
@@ -83,6 +89,7 @@ class BehavioralProbeResult:
     introduced_new_auxiliary: bool | None = None
     explanation: str | None = None
 
+
 @dataclass
 class StyleProfile:
     """The fixed communication style used by the simulated user."""
@@ -95,6 +102,7 @@ class StyleProfile:
     evidence_style: str
     description: str
 
+
 @dataclass
 class PrimaryCell:
     """One combination of the primary experimental conditions."""
@@ -106,6 +114,7 @@ class PrimaryCell:
     belief_anchor_level: str
     cell_id: str
 
+
 @dataclass
 class EvidencePlan:
     """The evidence selected for each evidence-bearing conversation phase."""
@@ -114,6 +123,7 @@ class EvidencePlan:
     core_challenge_2: EvidenceItem
     elaboration_1: EvidenceItem | None
     elaboration_2: EvidenceItem | None
+
 
 @dataclass
 class DialogueTurn:
@@ -131,6 +141,7 @@ class DialogueTurn:
     evidence_targets: list[str] | None = None
     active_auxiliaries: list[str] = field(default_factory=list)
 
+
 @dataclass
 class ConversationResult:
     """The complete output from one conversation replicate."""
@@ -140,6 +151,8 @@ class ConversationResult:
     dialogue_history: list[DialogueTurn]
     probe_outputs: list[BehavioralProbeResult]
     result_rows: list[dict[str, object]]
+    aux_mapping: dict[str, object]
+
 
 @dataclass
 class PromptTemplate:

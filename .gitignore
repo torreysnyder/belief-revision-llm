@@ -4,6 +4,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Virtual environments
 .venv/
@@ -19,6 +22,9 @@ env/
 .idea/
 .vscode/
 .DS_Store
+
+# Local throwaway files
+.tmp/
 
 # Generated experiment data and analysis outputs
 belief_revision_results_full_crossed.csv
