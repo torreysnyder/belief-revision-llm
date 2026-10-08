@@ -1,0 +1,33 @@
+{
+  "created_at": "2026-10-06T11:11:04.708668+00:00",
+  "script": "generate_caa_contrastive_pairs.py",
+  "script_sha256": "d29f152e835bdab7a7831e54e0e13d529ad1e8a81cbc2bcc8fdf4cd6ebcdf8f6",
+  "prompt_version": "caa_cf_v1",
+  "source_file": "dialogues_full_crossed_qwen2-5-0-5b-instruct-local_pilot.jsonl",
+  "source_sha256": "0a139483330c46b1ad15323f4f5722c9c42eb73ee861cc67e87df09b0a231f42",
+  "rewrite_model": "openai/gpt-oss-20b",
+  "rewrite_temperature": 0.2,
+  "target_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "tokenizer": "Qwen/Qwen2.5-0.5B-Instruct",
+  "tokenizer_revision": null,
+  "target_system_prompt_sha256": "e5b841b9f2dcf11485d861cdc53b9e5dcd8e57b8cc90abb9ee3b42d71d8d7eaf",
+  "control_types": [
+    "neutral",
+    "supportive"
+  ],
+  "limit": null,
+  "api_calls_used": 1585,
+  "outputs": {
+    "caa_pairs_core.jsonl": "b6fde4df5e792af2ea8ae4ae582a0ebd4b24ca01e397aebf1101da8ffc77fd2f",
+    "caa_pairs_auxiliary.jsonl": "9398f78a53a4070d90dc40cbc459d15793fc0fbaf5f7eb8aae0a1d0d18a6158a",
+    "caa_control_evidence.json": "b39d4a2b0193b472d0471da8832216e51aa02645362857431f83e49331104d36",
+    "caa_pairs_qc_report.json": "48fbb520252363ac41364167174533d50b3d9b55499df4bc9929c55289797e3d",
+    "caa_pairs_manual_review.csv": "652d4c098cba48899d5806a71b4ac57b8256d354874a9db49f9c5be6718346c2"
+  },
+  "counts": {
+    "auxiliary/neutral": 215,
+    "auxiliary/supportive": 215,
+    "core/neutral": 430,
+    "core/supportive": 430
+  }
+}
