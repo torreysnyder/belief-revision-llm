@@ -3,7 +3,14 @@ import random
 from dataclasses import asdict
 from typing import Any
 
-from .config import EVALUATOR_MODEL, PHASES, TARGET_MODEL, USER_SIM_MODEL
+from .config import (
+    EVALUATOR_MAX_TOKENS,
+    EVALUATOR_MODEL,
+    EVALUATOR_PROVIDER,
+    PHASES,
+    TARGET_MODEL,
+    USER_SIM_MODEL,
+)
 from .design import (
     counterbalance_vignette,
     phase_evidence_role,
@@ -262,6 +269,8 @@ def run_probe(
     probe_raw = call_model(
         EVALUATOR_MODEL,
         probe_messages,
+        provider=EVALUATOR_PROVIDER,
+        max_tokens=EVALUATOR_MAX_TOKENS,
         temperature=0.0,
     )
 

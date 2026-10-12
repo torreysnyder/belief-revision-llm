@@ -36,9 +36,15 @@ Edit [`src/belief_revision/config.py`](src/belief_revision/config.py):
 
 - `TARGET_MODEL` — target assistant being studied
 - `USER_SIM_MODEL` — simulated user
-- `EVALUATOR_MODEL` — behavioral evaluator
+- `EVALUATOR_PROVIDER` — `deepseek` (default), `openai`, `anthropic`, or `google`
+- `EVALUATOR_MODELS` — model ID for each API provider
+- `EVALUATOR_MAX_TOKENS` — evaluator output budget (4096 by default)
 
-## Validate configured NDIF models
+Set the selected provider’s key in `.env`: `DEEPSEEK_API_KEY`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY`.
+Only the assistant and simulated user use NDIF.
+
+## Validate configured models (live requests)
 
 ```bash
 uv run validate-models --user
@@ -91,10 +97,22 @@ Per-call temperatures and token limits currently live in
 [`src/belief_revision/conversation.py`](src/belief_revision/conversation.py).
 
 The temporary global prompt-length and response-token caps in `llm.py` are
-currently commented out. With full accumulated evaluator context enabled, long
-requests may exceed NDIF's per-job memory allowance.
+currently commented out. Evaluator checkpoints now use the selected external
+API with full dialogue context; provider context and output limits still apply.
 
 ## Configure credentials
 
 Copy [`sample.env`](sample.env) to `.env` and provide the required local
 credentials. Never commit `.env`.
+
+## Replay belief regions locally
+
+```bash
+python3 -m http.server 8000 --bind 127.0.0.1
+```
+
+Open `http://localhost:8000/assets/mock-brain/results.html` and click **Load latest
+local run**, or use **Open results** to select another JSONL file. Step through recorded turns, or click **Auto-play · 3s** to loop the conversation. Core Beliefs map
+to the cerebellum; A1/A2 map to the left/right cerebral hemispheres. This replays
+completed results; it does not start inference or connect to a live run. See the
+[brain integration guide](assets/mock-brain/README.md).

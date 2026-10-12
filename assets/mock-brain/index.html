@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Particle brain · SPAR</title>
+<style>
+:root{color-scheme:light dark}body{margin:0;background:light-dark(#f7f9fc,#0c1421);color:light-dark(#192331,#e4edf9);font:14px/1.5 system-ui,sans-serif}main{max-width:850px;margin:auto;padding:24px}h1{font-size:18px;font-weight:500}p{color:light-dark(#576779,#99a9bc)}
+</style>
+</head>
+<body><main><h1>Particle brain · SPAR</h1><div id="brain"></div><p>Demo signals. Drag horizontally or vertically to rotate.</p></main>
+<script type="module">
+import {createParticleBrain} from './particle-brain.js';
+const brain=createParticleBrain(document.getElementById('brain'),{mode:'spar'});
+window.brain=brain;
+window.addEventListener('pagehide',()=>brain.destroy(),{once:true});
+</script>
+</body></html>

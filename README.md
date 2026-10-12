@@ -14,6 +14,8 @@ multi-turn conversation.
   tables, model summaries, and figures.
 - `scripts/analyze_reporting.py` prints a compact summary of data uploaded to
   Supabase.
+- `assets/mock-brain/` contains the particle-brain component and local results
+  replay viewer; see its [integration guide](assets/mock-brain/README.md).
 - `vignettes_revised.json` defines the health and political belief-revision
   vignettes used by the experiment.
 
@@ -29,7 +31,8 @@ the analysis pipeline. Select the diagram to open the full-resolution version.
 
 The migrated experiment entry point is `scripts/run_experiment.py`. It uses the
 modules under `src/belief_revision/` for deterministic design, conversation
-execution, NDIF inference, local storage, and optional Supabase reporting. The
+execution, NDIF generation, API evaluation, local storage, and optional Supabase
+reporting. The
 legacy `belief_revision_experiment.py` remains in the repository for reference.
 
 Intentional behavioral and functional changes from the legacy implementation
@@ -58,8 +61,9 @@ cp sample.env .env
 For the legacy experiment, set `OPENAI_API_KEY`. For the migrated experiment,
 set `NDIF_API_KEY` and a Hugging Face read token in `HF_TOKEN`; the Hugging Face
 token is needed to retrieve gated model configuration and tokenizer files.
-Accept the applicable model license on Hugging Face before testing a gated
-model. The resulting `.env` file is ignored by Git and must not be committed.
+Also set the selected evaluator provider’s key (default: `DEEPSEEK_API_KEY`);
+see the evaluator configuration below. Accept the applicable model license on
+Hugging Face before testing a gated model. The resulting `.env` file is ignored by Git and must not be committed.
 
 ## Run the experiment
 
@@ -76,7 +80,8 @@ experiment:
 uv run python scripts/run_experiment.py
 ```
 
-The full configuration runs many conversations and submits live NDIF requests.
+The full configuration runs many conversations and submits live NDIF and
+evaluator API requests.
 Review the configured models, replicate count, and worker count before starting
 it.
 
@@ -128,6 +133,26 @@ uv run python scripts/analyze_reporting.py
 The summary includes run, conversation, turn, probe, and artifact counts;
 status and model breakdowns; and the first and latest run timestamps.
 
+## Replay local results
+
+Serve the repository root:
+
+```bash
+python3 -m http.server 8000 --bind 127.0.0.1
+```
+
+Open `http://localhost:8000/assets/mock-brain/results.html`. **Load latest local
+run** reads `dialogues_full_crossed.jsonl`; **Open results** accepts other saved
+JSONL files. Select a conversation and step through its transcript, or use
+**Auto-play · 3s** to loop through turns every three seconds.
+
+Core Beliefs map to the cerebellum, A1 to the left cerebral hemisphere, and A2
+to the right. Blue highlights show recorded activity and belief changes. The
+current results contain no deviation measurements, so red remains off. This
+viewer replays completed local results and does not connect to a live run or
+start inference. See the [integration guide](assets/mock-brain/README.md) for
+the component API and highlight mapping.
+
 ## Run the analysis
 
 After generating the results CSV:
@@ -159,7 +184,7 @@ uv run ruff format --check .
 
 The pytest configuration enforces 100% statement and branch coverage across
 the migrated `src/belief_revision/` package and operational `scripts/`. Unit
-tests mock NDIF and Supabase integrations, so the suite does not submit paid
+tests mock NDIF, evaluator APIs, and Supabase integrations, so the suite does not submit paid
 inference jobs or modify live reporting data.
 
 ## NDIF setup
@@ -170,18 +195,30 @@ inference jobs or modify live reporting data.
 4. Create a Hugging Face read token and copy it into `HF_TOKEN` in `.env`.
 5. Accept the license for each gated Hugging Face model you plan to use.
 
-The migrated entry point uses NDIF for all three model roles. Model availability
-depends on current deployment status and the access level associated with the
-API key.
+The assistant and simulated user use NDIF. Behavioral evaluation uses a separate
+API provider, selected in `src/belief_revision/config.py`:
 
-The behavioral evaluator receives the complete accumulated dialogue at each
-configured checkpoint. Long evaluator prompts can exceed NDIF's per-job memory
-allowance even without request batching. The temporary global response-token
-and prompt-length caps in `src/belief_revision/llm.py` are currently disabled;
-full-context runs may therefore require a larger NDIF allocation, a smaller
-evaluator, or a future evaluation path based on validated activation probes.
+- `EVALUATOR_PROVIDER`: `deepseek` (default), `openai`, `anthropic`, or `google`.
+- `EVALUATOR_MODELS`: editable model IDs for each provider; DeepSeek defaults to `deepseek-chat`.
+- `EVALUATOR_MAX_TOKENS`: output budget, initially 4096.
 
-## Verify the NDIF setup
+Populate only the selected provider's key in `.env`: `DEEPSEEK_API_KEY`,
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY`.
+Existing `.env` files should be edited rather than overwritten from the template.
+Evaluator checkpoints send the full accumulated dialogue to that provider,
+never to NDIF. Missing keys and API failures do not fall back to NDIF.
+The existing OpenAI SDK handles all four official chat-compatible endpoints;
+Anthropic uses its compatibility layer. Sampling uses provider defaults for
+compatibility. Requests have a 120-second timeout and bounded SDK retries for
+transient errors; empty or truncated responses raise errors. Provider context
+limits still apply. Conversation persistence remains completion-based.
+
+API references: [OpenAI](https://developers.openai.com/api/reference/resources/chat),
+[Anthropic](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk),
+[Google](https://ai.google.dev/gemini-api/docs/openai),
+[DeepSeek](https://api-docs.deepseek.com/).
+
+## Verify model connections
 
 Run these commands from the repository root.
 
@@ -207,7 +244,7 @@ uv run validate-models --evaluator
 uv run validate-models --all
 ```
 
-Each test passes when NDIF reports the job as `COMPLETED` and the model returns
+Each check uses the configured provider for its role and passes when it returns
 a non-empty response. The hosted base models may not follow the request to
 return exactly `OK`; these commands verify connectivity and generation rather
 than instruction-following quality. These are live integration tests and are

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {parseConversations,turnToBrainState} from './results-adapter.js';
+const state=row=>turnToBrainState(row).patch;
+assert.deepEqual(state({inject_evidence:true,evidence_role:'core_disconfirming'}).activity,[1,0,0]);
+assert.deepEqual(state({inject_evidence:true,evidence_targets:'["A1"]'}).activity,[0,1,0]);
+assert.deepEqual(state({inject_evidence:'True',evidence_targets:['A2'],active_auxiliaries:'["A1"]'}).activity,[0,.35,1]);
+assert.deepEqual(state({inject_evidence:false,evidence_targets:['A2']}).activity,[0,0,0]);
+assert.deepEqual(state({probe_ran_after_turn:true,changed_node:'C'}).activity,[1,0,0]);
+assert.deepEqual(state({probe_ran_after_turn:true,changed_node:'A2'}).activity,[0,0,1]);
+assert.deepEqual(state({probe_ran_after_turn:false,changed_node:'A1'}).activity,[0,0,0]);
+assert.deepEqual(state({probe_ran_after_turn:true,changed_node:'source'}).activity,[0,0,0]);
+assert.deepEqual(state({belief_core:99,belief_A1:80}).deviations,[0,0,0]);
+assert.deepEqual(state({active_auxiliaries:'broken'}).activity,[0,0,0]);
+assert.equal(parseConversations('{"rows":[{}]}\n{"rows":[{}]}\n').length,2);
+assert.throws(()=>parseConversations(''),/no completed/);
+assert.throws(()=>parseConversations('{oops}'),/line 1/);
+assert.throws(()=>parseConversations('{"rows":[null]}'),/valid turn/);
+console.log('PASS: core/A1/A2 highlights, evidence gating, fresh probes, no score-to-anomaly inference, JSONL validation.');

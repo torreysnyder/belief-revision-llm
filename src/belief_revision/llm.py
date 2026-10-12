@@ -7,6 +7,7 @@ from functools import lru_cache
 
 from dotenv import load_dotenv
 from nnsight import LanguageModel
+from openai import OpenAI
 
 load_dotenv()
 
@@ -166,8 +167,12 @@ def call_model(
     temperature: float = 0.7,
     max_tokens: int = 500,
     retries: int = 5,
+    provider: str = "ndif",
 ) -> str:
-    """Generate a response with retries for temporary NDIF failures."""
+    """Route explicitly; existing generation calls continue to use NDIF."""
+
+    if provider != "ndif":
+        return generate_api(provider, model_name, messages, max_tokens, retries)
 
     for attempt in range(retries):
         try:
@@ -185,3 +190,56 @@ def call_model(
             time.sleep(delay)
 
     raise RuntimeError("NDIF generation failed without returning a response.")
+
+
+API_PROVIDERS = {
+    "openai": ("OPENAI_API_KEY", "https://api.openai.com/v1"),
+    "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/"),
+    "google": (
+        "GOOGLE_API_KEY",
+        "https://generativelanguage.googleapis.com/v1beta/openai/",
+    ),
+    "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com"),
+}
+
+
+def generate_api(provider, model_name, messages, max_tokens, retries):
+    """Use official chat-compatible APIs with bounded SDK retries, never NDIF.
+
+    Sampling defaults are left to the provider for cross-model compatibility.
+    The SDK retries connection failures, 408, 409, 429 and server errors.
+    """
+    if provider not in API_PROVIDERS:
+        raise ValueError(f"Unknown API provider: {provider}")
+    key_name, base_url = API_PROVIDERS[provider]
+    key = os.getenv(key_name)
+    if not key:
+        raise RuntimeError(f"{key_name} is missing. Add it to the local .env file.")
+    if retries < 1:
+        raise ValueError("retries must be at least 1")
+    with OpenAI(
+        api_key=key,
+        base_url=base_url,
+        timeout=120.0,
+        max_retries=retries - 1,
+    ) as client:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            **{
+                (
+                    "max_completion_tokens" if provider == "openai" else "max_tokens"
+                ): max_tokens
+            },
+        )
+    if not response.choices:
+        raise RuntimeError(f"{provider} returned no completion choices")
+    choice = response.choices[0]
+    if choice.finish_reason == "length":
+        raise RuntimeError(
+            "Evaluator response was truncated; increase EVALUATOR_MAX_TOKENS"
+        )
+    content = choice.message.content
+    if not content or not content.strip():
+        raise RuntimeError(f"{provider} returned an empty response")
+    return content.strip()
