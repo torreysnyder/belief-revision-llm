@@ -1,8 +1,8 @@
-"""Run live NDIF smoke tests against the configured model roles."""
+"""Run live provider smoke tests against the configured model roles."""
 
 import argparse
 
-from ..config import EVALUATOR_MODEL, TARGET_MODEL, USER_SIM_MODEL
+from ..config import EVALUATOR_MODEL, EVALUATOR_PROVIDER, TARGET_MODEL, USER_SIM_MODEL
 from ..llm import call_model
 
 CONFIGURED_MODELS = {
@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     """Parse the model role to validate."""
 
     parser = argparse.ArgumentParser(
-        description="Validate configured models with live NDIF requests.",
+        description="Validate configured models with live provider requests.",
     )
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--user", action="store_const", const="user", dest="role")
@@ -48,6 +48,7 @@ def validate_model(role: str, model_name: str) -> bool:
             temperature=0,
             max_tokens=10,
             retries=1,
+            provider=EVALUATOR_PROVIDER if role == "evaluator" else "ndif",
         )
     except Exception as error:
         print(f"FAIL {role}: {error}")

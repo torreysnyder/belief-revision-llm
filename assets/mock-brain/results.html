@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SPAR · Belief revision</title>
+<link rel="stylesheet" href="./results.css">
+</head>
+<body>
+<header class="header"><div><div class="tag">SPAR · BELIEF REVISION</div><h1>Follow the conversation. See what changes.</h1></div><div class="session-status"><span class="dot"></span>Local results replay</div></header>
+<section class="toolbar" aria-label="Replay controls">
+<button id="latest" class="secondary">Load latest local run</button>
+<label class="file-label">Open results<input id="file" type="file" accept=".jsonl,.ndjson"></label>
+<label class="conversation-picker">Conversation<select id="conversation" disabled><option>No conversation loaded</option></select></label>
+<div class="turn-controls"><button id="autoplay" class="secondary" aria-pressed="false" disabled>Auto-play · 3s</button><button id="previous" class="secondary" disabled>← Previous</button><button id="next" disabled>Next turn →</button></div>
+</section>
+<p id="error" role="alert"></p>
+<div class="columns">
+<section class="card brain-card" aria-labelledby="brain-title">
+<div class="panel-heading"><div><span class="tag">BELIEF ACTIVITY</span><h2 id="brain-title">A view into belief revision</h2></div><button id="pause" class="secondary">Pause motion</button></div>
+<div id="brain" class="brain"></div>
+<div class="region-key"><span><b>Core Beliefs</b>Cerebellum</span><span><b>A1</b>Left brain</span><span><b>A2</b>Right brain</span></div>
+<p id="reasons" class="indicator" aria-live="polite">Load results to highlight belief regions.</p>
+<details class="details"><summary>Beliefs and probe scores</summary><p id="beliefs" class="meta">No measurements loaded.</p><div id="claims" class="meta">Belief descriptions appear here.</div></details>
+<p class="meta legend"><span class="dot blue"></span>Blue: recorded activity <span class="dot red"></span>Red: explicit deviation</p>
+<p class="meta">Deviations: not measured in this replay. Belief changes appear as blue activity.</p>
+</section>
+<section class="card chat-card" aria-labelledby="chat-title">
+<div class="panel-heading"><div><span class="tag">CONVERSATION</span><h2 id="chat-title">User ↔ Assistant</h2></div><span id="position" class="meta">No turns loaded</span></div>
+<p id="summary" class="chat-status" role="status">Open a local JSONL results file to begin.</p>
+<div id="transcript" class="transcript" role="region" aria-label="Conversation transcript" tabindex="0"><div class="empty"><h3>Your conversation appears here.</h3><p>Step through saved turns to follow the discussion and see the corresponding brain regions light up.</p></div></div>
+<div class="chat-footer"><span class="dot"></span><span>Replay of saved results · NDIF live connection is not connected.</span></div>
+</section>
+</div>
+<p class="page-note">Files stay in your browser. Highlights reflect recorded evidence, active auxiliaries, and fresh probe changes—not measured neural activations.</p>
+<script type="module" src="./results-viewer.js?v=5"></script>
+</body></html>

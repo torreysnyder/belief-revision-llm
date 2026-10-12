@@ -4,10 +4,16 @@ from .models import StyleProfile
 
 TARGET_MODEL = "Qwen/Qwen2.5-14B-Instruct"
 USER_SIM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-# TEMPORARY FULL-FLOW SMOKE TEST: Gemma exceeds NDIF's per-job memory limit
-# once the evaluator receives the accumulated dialogue. Restore Gemma after
-# validating the mechanics or receiving a larger Pilot allocation.
-EVALUATOR_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+# Evaluation uses the selected provider's API, independently of NDIF.
+EVALUATOR_PROVIDER = "deepseek"  # openai | anthropic | google | deepseek
+EVALUATOR_MODELS = {
+    "openai": "gpt-4.1-mini",
+    "anthropic": "claude-sonnet-4-6",
+    "google": "gemini-2.5-flash",
+    "deepseek": "deepseek-chat",
+}
+EVALUATOR_MODEL = EVALUATOR_MODELS[EVALUATOR_PROVIDER]
+EVALUATOR_MAX_TOKENS = 4096
 
 REPLICATES_PER_PRIMARY_CELL = 12
 MAX_WORKERS = 20
