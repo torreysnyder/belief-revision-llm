@@ -715,6 +715,17 @@ been shown to have a robust causal behavioral effect.
 5.  **Create and freeze conversation-level train/validation/test splits.**
 6.  **Reconstruct and verify Qwen prompts for both branches.**
 7.  **Run `extract_caa_activations.py` and save pair-level activations plus an activation manifest.**
+8.  **Run `build_caa_vectors.py` on the construction split to compute paired Core and Auxiliary CAA vectors.**
+9.  **Measure vector stability and Core--Auxiliary similarity.**
+10. **Select candidate intervention layers without using the held-out
+    outcome data.**
+11. **Run ±CAA and alpha sweeps on development examples.**
+12. **Run preregistered Core→Core and Auxiliary→Auxiliary held-out
+    tests.**
+13. **Run Core→Auxiliary and Auxiliary→Core cross-steering tests.**
+14. **Run random/shuffled-direction and generation-quality controls.**
+15. **Only then proceed to SAE training and feature-level
+    intervention.**
 
 ------------------------------------------------------------------------
 
@@ -760,17 +771,63 @@ uv run python activation_steering_pipeline/extract_caa_activations.py \
 The offline check intentionally cannot create new rewrites. Full activation
 extraction therefore requires the generated `caa_pairs_core.jsonl` and
 `caa_pairs_auxiliary.jsonl` files from the online pair-generation step.
-8.  **Run `build_caa_vectors.py` on the construction split to compute paired Core and Auxiliary CAA vectors.**
-9.  **Measure vector stability and Core--Auxiliary similarity.**
-10. **Select candidate intervention layers without using the held-out
-    outcome data.**
-11. **Run ±CAA and alpha sweeps on development examples.**
-12. **Run preregistered Core→Core and Auxiliary→Auxiliary held-out
-    tests.**
-13. **Run Core→Auxiliary and Auxiliary→Core cross-steering tests.**
-14. **Run random/shuffled-direction and generation-quality controls.**
-15. **Only then proceed to SAE training and feature-level
-    intervention.**
+
+### Branch handoff and validation
+
+If you have local changes, save them before switching branches:
+
+```bash
+git status --short
+git stash push --include-untracked -m "WIP before CAA integration validation"
+```
+
+Fetch the integration branch and switch to it:
+
+```bash
+git fetch origin
+git switch --track origin/caa-pipeline-cleanup
+git pull --ff-only
+uv sync
+```
+
+If the branch already exists locally, use `git switch caa-pipeline-cleanup`
+instead of the `--track` command.
+
+Validate the repository and the pair-building mechanics without making model
+requests:
+
+```bash
+uv run ruff check .
+uv run pytest
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --offline \
+  --no-render \
+  --out-dir .tmp/caa-smoke
+```
+
+Optionally run the bounded live pair-generation check shown above. If the
+results are good, merge this branch into the CAA working branch and push it:
+
+```bash
+git switch torreysnyder-caa-pipeline
+git pull --ff-only
+git merge --no-ff caa-pipeline-cleanup
+git push origin torreysnyder-caa-pipeline
+```
+
+After reviewing the integrated branch, merge it into `main` through the team's
+normal GitHub workflow. Restore the saved work on the branch where it belongs:
+
+```bash
+git switch torreysnyder-caa-pipeline
+git stash list
+git stash pop
+```
+
+Resolve any conflicts, rerun the checks above, and commit the restored work
+normally. Git retains the stash automatically if `stash pop` encounters a
+conflict.
 
 ------------------------------------------------------------------------
 
