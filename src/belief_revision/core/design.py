@@ -1,10 +1,8 @@
 """Experiment-cell construction, counterbalancing, and evidence selection."""
 
-import hashlib
 import random
-from dataclasses import replace
-
-from .config import (
+import hashlib
+from .defaults import (
     BELIEF_ANCHOR_LEVELS,
     CONVERSATION_GOALS,
     INITIAL_AFFECT_BY_ANCHOR,
@@ -12,6 +10,7 @@ from .config import (
     TRUST_LEVELS,
 )
 from .models import EvidenceItem, EvidencePlan, PrimaryCell, RunPlan, Vignette
+from dataclasses import replace
 
 
 def make_stable_seed(*parts: object) -> int:
@@ -32,13 +31,7 @@ def build_primary_cells(vignettes: list[Vignette]) -> list[PrimaryCell]:
             for trust in TRUST_LEVELS:
                 for goal in CONVERSATION_GOALS:
                     for belief_anchor_level in BELIEF_ANCHOR_LEVELS:
-                        cell_id = (
-                            f"{vignette.id}__"
-                            f"{style_profile.style_id}__"
-                            f"{trust}__"
-                            f"{goal}__"
-                            f"{belief_anchor_level}"
-                        )
+                        cell_id = f"{vignette.id}__{style_profile.style_id}__{trust}__{goal}__{belief_anchor_level}"
 
                         cells.append(
                             PrimaryCell(
@@ -69,19 +62,11 @@ def build_run_plans(
 
         initial_affect = affect_pool[replicate_index % len(affect_pool)]
 
-        core_order_condition = (
-            "strong_then_moderate"
-            if replicate_index % 2 == 0
-            else "moderate_then_strong"
-        )
+        core_order_condition = "strong_then_moderate" if replicate_index % 2 == 0 else "moderate_then_strong"
 
-        elaboration_1_condition = (
-            "ambiguous" if (replicate_index // 2) % 2 == 0 else "supporting"
-        )
+        elaboration_1_condition = "ambiguous" if (replicate_index // 2) % 2 == 0 else "supporting"
 
-        elaboration_2_target_condition = (
-            "A1" if (replicate_index // 4) % 2 == 0 else "A2"
-        )
+        elaboration_2_target_condition = "A1" if (replicate_index // 4) % 2 == 0 else "A2"
 
         seed = make_stable_seed(
             primary_cell.vignette.id,
@@ -124,17 +109,12 @@ def counterbalance_vignette(
     original_auxiliaries = vignette.auxiliaries
 
     if len(original_auxiliaries) != 2:
-        raise ValueError(
-            f"Expected exactly 2 auxiliaries, got "
-            f"{len(original_auxiliaries)} in {vignette.id}"
-        )
+        raise ValueError(f"Expected exactly 2 auxiliaries, got {len(original_auxiliaries)} in {vignette.id}")
 
     canonical_ids = [auxiliary.id for auxiliary in original_auxiliaries]
 
     if canonical_ids != ["A1", "A2"]:
-        raise ValueError(
-            f"Expected auxiliary ids ['A1', 'A2'], got {canonical_ids} in {vignette.id}"
-        )
+        raise ValueError(f"Expected auxiliary ids ['A1', 'A2'], got {canonical_ids} in {vignette.id}")
 
     if aux_order_condition == "original":
         reordered_auxiliaries = [
@@ -181,9 +161,7 @@ def counterbalance_vignette(
         auxiliary_evidence=remapped_auxiliary_evidence,
     )
 
-    display_to_canonical = {
-        display: canonical for canonical, display in canonical_to_display.items()
-    }
+    display_to_canonical = {display: canonical for canonical, display in canonical_to_display.items()}
 
     mapping = {
         "aux_order_condition": aux_order_condition,
@@ -203,17 +181,9 @@ def select_evidence_by_condition(
 ) -> EvidencePlan:
     """Select phase evidence according to the replicate conditions."""
 
-    strong_core = [
-        evidence
-        for evidence in vignette.core_evidence_disconfirming
-        if evidence.strength == "strong"
-    ]
+    strong_core = [evidence for evidence in vignette.core_evidence_disconfirming if evidence.strength == "strong"]
 
-    moderate_core = [
-        evidence
-        for evidence in vignette.core_evidence_disconfirming
-        if evidence.strength == "moderate"
-    ]
+    moderate_core = [evidence for evidence in vignette.core_evidence_disconfirming if evidence.strength == "moderate"]
 
     if not strong_core:
         strong_core = vignette.core_evidence_disconfirming
@@ -229,24 +199,11 @@ def select_evidence_by_condition(
         challenge_2 = rng.choice(strong_core)
 
     if run_plan.elaboration_1_condition == "ambiguous":
-        elaboration_1 = (
-            rng.choice(vignette.core_evidence_ambiguous)
-            if vignette.core_evidence_ambiguous
-            else None
-        )
+        elaboration_1 = rng.choice(vignette.core_evidence_ambiguous) if vignette.core_evidence_ambiguous else None
     else:
-        elaboration_1 = (
-            rng.choice(vignette.core_evidence_supporting)
-            if vignette.core_evidence_supporting
-            else None
-        )
+        elaboration_1 = rng.choice(vignette.core_evidence_supporting) if vignette.core_evidence_supporting else None
 
-    auxiliary_candidates = [
-        evidence
-        for evidence in vignette.auxiliary_evidence
-        if evidence.targets
-        and run_plan.elaboration_2_target_condition in evidence.targets
-    ]
+    auxiliary_candidates = [evidence for evidence in vignette.auxiliary_evidence if evidence.targets and run_plan.elaboration_2_target_condition in evidence.targets]
 
     if not auxiliary_candidates:
         auxiliary_candidates = vignette.auxiliary_evidence

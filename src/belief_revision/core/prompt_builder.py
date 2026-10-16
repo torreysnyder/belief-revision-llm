@@ -5,15 +5,14 @@ converts it into template values, and inserts those values into the appropriate
 prompt without requiring each caller to repeat the conversion logic.
 """
 
-import json
 import re
+import json
+from .models import PromptTemplate
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import PromptTemplate
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}")
@@ -46,9 +45,7 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
     """Expand structured conversation context into template variables."""
 
     json_indent = context.get("_json_indent")
-    variables = {
-        name: value for name, value in context.items() if not name.startswith("_")
-    }
+    variables = {name: value for name, value in context.items() if not name.startswith("_")}
 
     for name, value in context.items():
         if not name.startswith("_"):
@@ -64,10 +61,7 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
                 "core_claim": vignette.core_claim,
                 "displayed_A1": vignette.auxiliaries[0].text,
                 "displayed_A2": vignette.auxiliaries[1].text,
-                "auxiliary_text": "\n".join(
-                    f"- {auxiliary.id}: {auxiliary.text}"
-                    for auxiliary in vignette.auxiliaries
-                ),
+                "auxiliary_text": "\n".join(f"- {auxiliary.id}: {auxiliary.text}" for auxiliary in vignette.auxiliaries),
             }
         )
 
@@ -102,9 +96,7 @@ def prepare_prompt_variables(context: dict[str, object]) -> dict[str, object]:
     variables["evidence_role"] = evidence_role or "none"
 
     evidence_item = context.get("evidence_item")
-    variables["evidence_text"] = (
-        evidence_item.text if evidence_item is not None else "None"
-    )
+    variables["evidence_text"] = evidence_item.text if evidence_item is not None else "None"
 
     return variables
 
@@ -135,11 +127,7 @@ def validate_prompt_template(template: PromptTemplate) -> str:
         missing_from_metadata = discovered - declared
         missing_from_file = declared - discovered
 
-        raise ValueError(
-            f"Prompt variable mismatch for {template.name}: "
-            f"missing from metadata={sorted(missing_from_metadata)}, "
-            f"missing from file={sorted(missing_from_file)}"
-        )
+        raise ValueError(f"Prompt variable mismatch for {template.name}: missing from metadata={sorted(missing_from_metadata)}, missing from file={sorted(missing_from_file)}")
 
     return prompt_text
 

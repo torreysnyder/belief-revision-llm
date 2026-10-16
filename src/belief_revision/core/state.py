@@ -1,7 +1,6 @@
-import random
 import re
-
-from .config import BELIEF_ANCHOR_MAP
+import random
+from .defaults import BELIEF_ANCHOR_MAP
 from .models import EvidenceItem, UserState, Vignette
 
 
@@ -147,8 +146,5 @@ def activate_mentioned_auxiliaries(
             user_state.active_auxiliaries.append(auxiliary_id)
 
     for auxiliary in vignette.auxiliaries:
-        if (
-            auxiliary.id in invoked_auxiliaries
-            and auxiliary.text not in user_state.active_auxiliary_texts
-        ):
+        if auxiliary.id in invoked_auxiliaries and auxiliary.text not in user_state.active_auxiliary_texts:
             user_state.active_auxiliary_texts.append(auxiliary.text)

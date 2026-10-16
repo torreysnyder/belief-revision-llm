@@ -54,13 +54,72 @@ import argparse
 import threading
 import statistics
 import concurrent.futures
+from belief_revision.core.conversation import make_target_system_prompt
+from belief_revision.core.defaults import PHASES, TARGET_MODEL, USER_SIM_MODEL
+from belief_revision.core.llm import call_model as call_core_model
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 
-import belief_revision_experiment_qwen as brx
+PIPELINE_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT = PIPELINE_DIR / "data" / "pilot_original.jsonl"
+DEFAULT_OUT_DIR = PIPELINE_DIR / "data"
+DAILY_CALL_BUDGET = 1000
 
-DEFAULT_INPUT = "dialogues_full_crossed_qwen2-5-0-5b-instruct-local_pilot.jsonl"
-DEFAULT_OUT_DIR = "data"
+
+class BudgetExceeded(RuntimeError):
+    """Raised before a generation would exceed the configured run budget."""
+
+
+_budget_lock = threading.Lock()
+_call_budget = DAILY_CALL_BUDGET
+_calls_used = 0
+_stop_requested = False
+
+
+def set_call_budget(limit):
+    global _call_budget, _calls_used, _stop_requested
+    with _budget_lock:
+        _call_budget = limit
+        _calls_used = 0
+        _stop_requested = False
+
+
+def calls_used():
+    with _budget_lock:
+        return _calls_used
+
+
+def request_stop():
+    global _stop_requested
+    with _budget_lock:
+        _stop_requested = True
+
+
+def call_model(model, messages, temperature=0.7, max_tokens=500):
+    global _calls_used
+    with _budget_lock:
+        if _stop_requested or _calls_used >= _call_budget:
+            raise BudgetExceeded(f"API-call budget of {_call_budget} reached")
+        _calls_used += 1
+    return call_core_model(model, messages, temperature=temperature, max_tokens=max_tokens).text
+
+
+def extract_json(raw):
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("model response did not contain a JSON object")
+    parsed = json.loads(text[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("model response JSON must be an object")
+    return parsed
+
+
+def clean_user_turn(text):
+    return re.sub(r"^\s*(?:user|control(?:led)?\s+message)\s*:\s*", "", text, flags=re.IGNORECASE).strip()
 
 # Bump when either generation prompt changes; part of every cache key.
 PROMPT_VERSION = "caa_cf_v1"
@@ -177,7 +236,7 @@ def evidence_lookup(vignette_raw):
 def probe_context(probe_outputs, phase_name):
     """Latest probe before this phase (pre) and the probe run at the end of
     this phase, if any (post). Probes are for validation only."""
-    phase_order = [p["name"] for p in brx.PHASES]
+    phase_order = [p["name"] for p in PHASES]
     idx = phase_order.index(phase_name)
     pre = None
     post = None
@@ -199,7 +258,7 @@ def build_messages(system_prompt, history_before, user_text):
 
 
 def extract_source_states(conversations, source_path, source_sha):
-    system_prompt = brx.make_target_system_prompt()
+    system_prompt = make_target_system_prompt()
     states = []
     for line_no, conv in conversations:
         cell = conv["primary_cell"]
@@ -360,12 +419,12 @@ def generate_substitute(model, vignette, ev, target_label, target_text, control_
     feedback = None
     last = None
     for attempt in range(1, SUBSTITUTE_MAX_ATTEMPTS + 1):
-        raw = brx.call_model(model, [
+        raw = call_model(model, [
             {"role": "system", "content": SUBSTITUTE_SYSTEM_PROMPT},
             {"role": "user", "content": build_substitute_prompt(vignette, ev, target_label, target_text, control_type, feedback)},
         ], temperature=SUBSTITUTE_TEMPERATURE, max_tokens=300)
         try:
-            parsed = brx.extract_json(raw)
+            parsed = extract_json(raw)
             text = (parsed.get("text") or "").strip()
         except (ValueError, AttributeError):
             feedback, last = "the output was not valid JSON with a 'text' field", None
@@ -525,13 +584,13 @@ def generate_control_rewrite(model, state, sub):
     feedback = None
     best = None
     for attempt in range(1, REWRITE_MAX_ATTEMPTS + 1):
-        raw = brx.call_model(model, [
+        raw = call_model(model, [
             {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
             {"role": "user", "content": build_rewrite_prompt(state, sub, feedback)},
         ], temperature=REWRITE_TEMPERATURE if attempt == 1 else REWRITE_TEMPERATURE + 0.2, max_tokens=400)
         try:
-            parsed = brx.extract_json(raw)
-            text = brx._clean_user_turn(parsed.get("control_text") or "")
+            parsed = extract_json(raw)
+            text = clean_user_turn(parsed.get("control_text") or "")
             refs = bool(parsed.get("original_references_evidence", True))
         except (ValueError, AttributeError):
             feedback = "the output was not valid JSON with a 'control_text' field"
@@ -612,11 +671,11 @@ def run_rewrites(states, substitutes, control_types, out_dir, model, workers, of
             s, ct, _, _ = futs[fut]
             try:
                 rec = fut.result()
-            except brx.BudgetExceeded as e:
+            except BudgetExceeded as e:
                 if not budget_hit:
                     budget_hit = True
                     print(f"Stopping: {e}. Re-run later to resume from the cache.")
-                    brx.request_stop()
+                    request_stop()
                 continue
             except Exception as e:
                 failed += 1
@@ -625,7 +684,7 @@ def run_rewrites(states, substitutes, control_types, out_dir, model, workers, of
             results[(s["source_state_id"], ct)] = rec
             done += 1
             if done % 25 == 0 or done == len(jobs):
-                print(f"  [{done}/{len(jobs)}] rewrites done | API calls used: {brx.calls_used()}")
+                print(f"  [{done}/{len(jobs)}] rewrites done | API calls used: {calls_used()}")
     if failed or budget_hit:
         print(f"Rewrites incomplete: {failed} failed, budget stop: {budget_hit}. Missing pairs are left out of this build.")
     return results
@@ -839,20 +898,20 @@ def main():
     ap.add_argument("--input", default=DEFAULT_INPUT)
     ap.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     ap.add_argument("--control-types", nargs="+", default=CONTROL_TYPES, choices=CONTROL_TYPES)
-    ap.add_argument("--rewrite-model", default=brx.USER_SIM_MODEL)
+    ap.add_argument("--rewrite-model", default=USER_SIM_MODEL)
     ap.add_argument("--limit", type=int, default=None,
                     help="only use the first N source states of each contrast type (for testing)")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--budget", type=int, default=brx.DAILY_CALL_BUDGET, help="max API calls this run")
+    ap.add_argument("--budget", type=int, default=DAILY_CALL_BUDGET, help="max API calls this run")
     ap.add_argument("--offline", action="store_true", help="make no API calls; build pairs from caches only")
-    ap.add_argument("--tokenizer", default=brx.TARGET_MODEL_HF_PATH)
+    ap.add_argument("--tokenizer", default=TARGET_MODEL)
     ap.add_argument("--no-render", action="store_true", help="skip rendering prompts with the Qwen chat template")
     ap.add_argument("--review-per-stratum", type=int, default=2)
     ap.add_argument("--seed", type=int, default=12345)
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
-    brx.set_call_budget(args.budget)
+    set_call_budget(args.budget)
 
     source_sha = freeze_source(args.input, args.out_dir)
     conversations = read_jsonl(args.input)
@@ -908,17 +967,17 @@ def main():
         "script": os.path.basename(__file__),
         "script_sha256": sha256_file(__file__),
         "prompt_version": PROMPT_VERSION,
-        "source_file": args.input,
+        "source_file": str(args.input),
         "source_sha256": source_sha,
         "rewrite_model": args.rewrite_model,
         "rewrite_temperature": REWRITE_TEMPERATURE,
-        "target_model": brx.TARGET_MODEL_HF_PATH,
+        "target_model": TARGET_MODEL,
         "tokenizer": args.tokenizer if tokenizer is not None else None,
         "tokenizer_revision": tok_revision,
-        "target_system_prompt_sha256": sha256_text(brx.make_target_system_prompt()),
+        "target_system_prompt_sha256": sha256_text(make_target_system_prompt()),
         "control_types": args.control_types,
         "limit": args.limit,
-        "api_calls_used": brx.calls_used(),
+        "api_calls_used": calls_used(),
         "outputs": {
             os.path.basename(p): sha256_file(p)
             for p in (core_path, aux_path, sub_path, report_path, review_path) if os.path.exists(p)
@@ -936,7 +995,7 @@ def main():
         print(f"  {len(missing)} pair(s) missing a rewrite or substitute (see {report_path})")
     print(f"  wrote {core_path}, {aux_path}")
     print(f"  manual review sample ({n_review} pairs): {review_path}")
-    print(f"  API calls used: {brx.calls_used()}")
+    print(f"  API calls used: {calls_used()}")
 
 
 if __name__ == "__main__":

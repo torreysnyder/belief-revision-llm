@@ -1,9 +1,6 @@
-from dataclasses import dataclass
-
 import pytest
-
-from belief_revision.models import PromptTemplate
-from belief_revision.prompt_builder import (
+from belief_revision.core.models import PromptTemplate
+from belief_revision.core.prompt_builder import (
     _json_default,
     _to_json,
     find_prompt_variables,
@@ -12,8 +9,9 @@ from belief_revision.prompt_builder import (
     render_prompt,
     validate_prompt_template,
 )
-from belief_revision.prompt_registry import make_prompt_template
-from belief_revision.state import init_user_state
+from belief_revision.core.prompt_registry import make_prompt_template
+from belief_revision.core.state import init_user_state
+from dataclasses import dataclass
 
 
 @dataclass
@@ -46,9 +44,7 @@ def test_json_helpers_and_structured_variables(vignette, style):
     assert variables["evidence_role"] == "none"
     assert variables["evidence_text"] == "None"
 
-    evidence_variables = prepare_prompt_variables(
-        {"evidence_item": vignette.auxiliary_evidence[0]}
-    )
+    evidence_variables = prepare_prompt_variables({"evidence_item": vignette.auxiliary_evidence[0]})
     assert evidence_variables["evidence_text"] == "Auxiliary evidence"
 
 

@@ -715,6 +715,51 @@ been shown to have a robust causal behavioral effect.
 5.  **Create and freeze conversation-level train/validation/test splits.**
 6.  **Reconstruct and verify Qwen prompts for both branches.**
 7.  **Run `extract_caa_activations.py` and save pair-level activations plus an activation manifest.**
+
+------------------------------------------------------------------------
+
+## Running the current pipeline
+
+Run commands from the repository root through the locked `uv` environment.
+The pair generator now uses the migrated implementation under
+`src/belief_revision/core/`; it no longer depends on the unavailable legacy
+`belief_revision_experiment_qwen.py` module.
+
+Verify the bundled pilot and pair-building mechanics without making model
+requests:
+
+```bash
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --offline \
+  --no-render \
+  --out-dir .tmp/caa-smoke
+```
+
+Generate a bounded live sample with the configured user model:
+
+```bash
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --budget 10 \
+  --no-render \
+  --out-dir .tmp/caa-online-smoke
+```
+
+Remove `--limit 1` and choose an appropriate budget and output directory when
+generating the full pair dataset.
+
+Then run a limited activation-extraction smoke test:
+
+```bash
+uv run python activation_steering_pipeline/extract_caa_activations.py \
+  --limit 4 \
+  --out-dir activation_steering_pipeline/activations_smoke
+```
+
+The offline check intentionally cannot create new rewrites. Full activation
+extraction therefore requires the generated `caa_pairs_core.jsonl` and
+`caa_pairs_auxiliary.jsonl` files from the online pair-generation step.
 8.  **Run `build_caa_vectors.py` on the construction split to compute paired Core and Auxiliary CAA vectors.**
 9.  **Measure vector stability and Core--Auxiliary similarity.**
 10. **Select candidate intervention layers without using the held-out

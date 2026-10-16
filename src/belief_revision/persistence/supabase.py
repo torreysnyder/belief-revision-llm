@@ -1,16 +1,14 @@
 """Optional durable experiment reporting through Supabase."""
 
 import os
+import hashlib
+from ..core.models import ConversationResult, ExperimentArtifact
 from dataclasses import asdict
 from datetime import UTC, datetime
+from dotenv import load_dotenv
+from supabase import Client, create_client
 from typing import Any
 from uuid import UUID, uuid4, uuid5
-
-from dotenv import load_dotenv
-
-from supabase import Client, create_client
-
-from .models import ConversationResult
 
 
 def utc_now() -> str:
@@ -27,9 +25,7 @@ def create_reporting_client() -> Client:
     secret_key = os.getenv("SUPABASE_SECRET_KEY")
 
     if not url or not secret_key:
-        raise RuntimeError(
-            "Supabase access requires SUPABASE_URL and SUPABASE_SECRET_KEY in .env."
-        )
+        raise RuntimeError("Supabase access requires SUPABASE_URL and SUPABASE_SECRET_KEY in .env.")
 
     return create_client(url, secret_key)
 
@@ -80,15 +76,10 @@ class SupabaseReporter:
             conversation_id = str(
                 uuid5(
                     UUID(run_id),
-                    (
-                        f"{result.primary_cell.cell_id}:"
-                        f"{result.run_plan.replicate_index}"
-                    ),
+                    (f"{result.primary_cell.cell_id}:{result.run_plan.replicate_index}"),
                 )
             )
-            result_rows = {
-                int(row["global_turn_index"]): row for row in result.result_rows
-            }
+            result_rows = {int(row["global_turn_index"]): row for row in result.result_rows}
 
             conversation = {
                 "id": conversation_id,
@@ -151,12 +142,92 @@ class SupabaseReporter:
                     on_conflict="conversation_id,probe_index",
                 ).execute()
 
+            for artifact in result.artifacts:
+                self._save_artifact(run_id, conversation_id, artifact)
+
             self.client.table("conversations").update(
                 {
                     "status": "completed",
                     "completed_at": utc_now(),
                 }
             ).eq("id", conversation_id).execute()
+
+    def _save_artifact(
+        self,
+        run_id: str,
+        conversation_id: str,
+        artifact: ExperimentArtifact,
+    ) -> None:
+        """Upload one binary artifact and index its activation metadata."""
+
+        bucket = "experiment-artifacts"
+        storage_path = f"{run_id}/{conversation_id}/{artifact.local_path.name}"
+        checksum = hashlib.sha256(artifact.local_path.read_bytes()).hexdigest()
+        artifact_id = str(uuid5(UUID(conversation_id), storage_path))
+
+        with artifact.local_path.open("rb") as artifact_file:
+            self.client.storage.from_(bucket).upload(
+                file=artifact_file,
+                path=storage_path,
+                file_options={
+                    "cache-control": "3600",
+                    "content-type": "application/octet-stream",
+                    "upsert": "true",
+                },
+            )
+
+        model_ids = {record.model_name for record in artifact.activation_records}
+        self.client.table("experiment_artifacts").upsert(
+            {
+                "id": artifact_id,
+                "conversation_id": conversation_id,
+                "artifact_type": artifact.artifact_type,
+                "storage_bucket": bucket,
+                "storage_path": storage_path,
+                "model_id": next(iter(model_ids)) if len(model_ids) == 1 else None,
+                "checksum": checksum,
+                "metadata": artifact.metadata,
+            },
+            on_conflict="id",
+        ).execute()
+
+        captures = []
+        for record_index, record in enumerate(artifact.activation_records):
+            for activation_index, (layer, token_index, sequence_length, tensor_shape, tensor_dtype) in enumerate(
+                zip(
+                    record.layers,
+                    record.token_indices,
+                    record.sequence_lengths,
+                    record.tensor_shapes,
+                    record.tensor_dtypes,
+                    strict=True,
+                )
+            ):
+                captures.append(
+                    {
+                        "artifact_id": artifact_id,
+                        "conversation_id": conversation_id,
+                        "artifact_record_index": record_index,
+                        "activation_index": activation_index,
+                        "global_turn_index": record.global_turn_index,
+                        "phase": record.phase,
+                        "turn_in_phase": record.turn_in_phase,
+                        "model_id": record.model_name,
+                        "location": record.location,
+                        "token_position": record.token_position,
+                        "layer_index": layer,
+                        "token_index": token_index,
+                        "sequence_length": sequence_length,
+                        "tensor_shape": list(tensor_shape),
+                        "tensor_dtype": tensor_dtype,
+                    }
+                )
+
+        if captures:
+            self.client.table("activation_captures").upsert(
+                captures,
+                on_conflict="artifact_id,artifact_record_index,activation_index",
+            ).execute()
 
     def complete_run(
         self,

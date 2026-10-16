@@ -3,11 +3,10 @@
 import csv
 import json
 import threading
+from ..core.models import Auxiliary, ConversationResult, EvidenceItem, Vignette
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
-
-from .models import Auxiliary, ConversationResult, EvidenceItem, Vignette
 
 WRITE_LOCK = threading.Lock()
 
@@ -20,15 +19,9 @@ def parse_vignette(raw: dict[str, Any]) -> Vignette:
         domain=raw["domain"],
         core_claim=raw["core_claim"],
         auxiliaries=[Auxiliary(**item) for item in raw["auxiliaries"]],
-        core_evidence_disconfirming=[
-            EvidenceItem(**item) for item in raw["core_evidence_disconfirming"]
-        ],
-        core_evidence_supporting=[
-            EvidenceItem(**item) for item in raw["core_evidence_supporting"]
-        ],
-        core_evidence_ambiguous=[
-            EvidenceItem(**item) for item in raw["core_evidence_ambiguous"]
-        ],
+        core_evidence_disconfirming=[EvidenceItem(**item) for item in raw["core_evidence_disconfirming"]],
+        core_evidence_supporting=[EvidenceItem(**item) for item in raw["core_evidence_supporting"]],
+        core_evidence_ambiguous=[EvidenceItem(**item) for item in raw["core_evidence_ambiguous"]],
         auxiliary_evidence=[EvidenceItem(**item) for item in raw["auxiliary_evidence"]],
     )
 

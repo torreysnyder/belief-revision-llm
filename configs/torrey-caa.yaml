@@ -1,0 +1,17 @@
+evaluator:
+  mode: enabled
+  provider: deepseek
+  model: deepseek-chat
+  max_tokens: 4096
+
+extensions:
+  torrey-caa:
+    phases:
+      - closing
+    turns:
+      - 1
+    layers:
+      - 1
+      - 13
+      - 24
+    output_dir: activation_steering_pipeline/activations/live_captures

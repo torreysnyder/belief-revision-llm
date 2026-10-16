@@ -7,18 +7,17 @@ structural moves that preserve behavior are not listed.
 ## Inference backend
 
 - **Legacy:** Model calls use the OpenAI API directly.
-- **Current migration state:** Model calls use NNsight for remote inference
-  through NDIF, and all three model roles currently share that path.
+- **Current migration state:** User and assistant calls use NNsight through
+  NDIF. Behavioral evaluation uses a configured chat-compatible provider API.
 - **Reason:** The research plan requires open-weight model access and future
   activation-level experiments.
-- **Status:** Implemented in `src/belief_revision/llm.py`; not yet connected to
-  the legacy entry point. The migrated `scripts/run_experiment.py` entry point
-  uses it for all three model roles.
+- **Status:** Implemented in `src/belief_revision/core/llm.py`; the migrated entry
+  point routes user and assistant calls to NDIF and evaluator calls to the API
+  provider/model selected by configuration.
 
-Provider routing remains intentionally open. A later configuration may route
-roles independently—for example, an evaluator through OpenAI, a user simulator
-through NDIF, and a target assistant through a RunPod-hosted inference server.
-The parity migration does not yet introduce that routing abstraction.
+Evaluator provider routing supports OpenAI, Anthropic, Google, and DeepSeek
+through their chat-compatible APIs. NDIF is intentionally excluded from the
+evaluator choices.
 
 ## Behavioral probe model
 
@@ -51,11 +50,13 @@ The parity migration does not yet introduce that routing abstraction.
   primary cell completes.
 - **Migrated:** Local files are still always written. Passing
   `--reporting true` additionally uploads the run, completed conversations,
-  individual turns, and behavioral probes to Supabase.
+  individual turns, behavioral probes, extension artifacts, and searchable
+  activation metadata to Supabase. Binary tensor payloads remain in private
+  Storage rather than Postgres.
 - **Reason:** A shared database lets multiple researchers consolidate results
   while preserving a fast local-only iteration path.
-- **Status:** Implemented in `src/belief_revision/reporting.py` and wired into
-  `src/belief_revision/runner.py`. Uploads currently happen after a completed
+- **Status:** Implemented in `src/belief_revision/persistence/supabase.py` and wired into
+  `src/belief_revision/core/runner.py`. Uploads currently happen after a completed
   primary cell; incremental turn-level checkpointing remains future work for
   long-horizon experiments.
 
@@ -65,14 +66,35 @@ The parity migration does not yet introduce that routing abstraction.
   accumulated at each configured checkpoint. Its scores are observational and
   do not control dialogue generation, evidence injection, state updates, or
   phase progression.
-- **Limitation:** A single long evaluator prompt can exceed NDIF's per-job GPU
-  memory allowance. Reducing concurrent workers does not remove that
-  single-request memory requirement.
+- **Limitation addressed:** Long evaluator prompts repeatedly exceeded NDIF's
+  per-job GPU memory allowance, so enabled evaluators now use configured APIs.
 - **Planned:** Use evaluator or human-reviewed labels to establish a calibration
   dataset, validate activation probes against those labels, and then store
   activation-derived measurements during generation. Raw activations are
   predictors, not ground-truth labels; a smaller held-out judged sample can be
   used to monitor calibration.
-- **Status:** Activation capture and probe replacement are not implemented. The
-  `experiment_artifacts` table reserves references for future activation,
-  steering, and SAE artifacts.
+- **Status:** Extension-driven activation capture is implemented. Torrey's CAA
+  extension writes one local tensor artifact per conversation; with reporting
+  enabled, that artifact is uploaded to private Storage and indexed through
+  `experiment_artifacts` and `activation_captures`. Probe replacement remains
+  future work.
+- **Operational control:** `--evaluator-mode disabled` skips behavioral
+  evaluator calls without changing conversation generation, phase progression,
+  extension hooks, or activation capture. Probe fields remain empty for those
+  runs. The default remains `enabled` for behavioral experiments.
+
+## Controlled-counterfactual pair generation
+
+- **Branch version:** Torrey's pair generator imported an unavailable
+  `belief_revision_experiment_qwen.py` module for prompts, model calls, model
+  names, and its request budget.
+- **Integrated version:** The generator imports those capabilities from
+  `src/belief_revision/core/` and retains a small local run-budget wrapper for
+  resumable pair generation. Its default input is the bundled
+  `activation_steering_pipeline/data/pilot_original.jsonl` dataset.
+- **Reason:** A fresh checkout can now inspect and run the pair pipeline through
+  the same maintained experiment implementation used by vanilla and extension
+  runs.
+- **Status:** The CLI and offline one-state smoke test pass. Producing the real
+  pair files still requires live model calls; activation extraction begins only
+  after those derived files exist.
