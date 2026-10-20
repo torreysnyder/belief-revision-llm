@@ -51,7 +51,7 @@ show_missing = true
 
 [tool.ruff]
 line-length = 88
-extend-exclude = ["analysis_full_crossed.py", "belief_revision_experiment.py"]
+extend-exclude = ["analysis_full_crossed.py", "belief_revision_experiment.py", "variability_by_vignette.py", "old"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]

@@ -16,9 +16,9 @@ multi-turn conversation.
   Supabase.
 - `vignettes_revised.json` defines the health and political belief-revision
   vignettes used by the experiment.
-- `belief_revision_minimal_llama.py` runs a minimal version of the experiment
+- `old/belief_revision_minimal_llama.py` runs a minimal version of the experiment
   with a local open-weight target model (see below).
-- `interp_smoke_test.py` checks that the optional interpretability environment
+- `old/interp_smoke_test.py` checks that the optional interpretability environment
   can load an open-weight model and cache activations.
 
 ## Experiment workflow
@@ -183,8 +183,8 @@ Developer Mode lets the cache use symlinks and avoids duplicate files.
 ### Check the environment
 
 ```bash
-uv run python interp_smoke_test.py
-uv run python interp_smoke_test.py Qwen/Qwen2.5-0.5B-Instruct  # ungated alternative
+uv run python old/interp_smoke_test.py
+uv run python old/interp_smoke_test.py Qwen/Qwen2.5-0.5B-Instruct  # ungated alternative
 ```
 
 The script loads the model, runs a chat-formatted prompt, caches activations,
@@ -192,7 +192,7 @@ and reports the next-token prediction and peak GPU memory.
 
 ### Minimal open-weight run
 
-`belief_revision_minimal_llama.py` is a small version of the experiment with
+`old/belief_revision_minimal_llama.py` is a small version of the experiment with
 Llama-3.2-1B-Instruct as the target, run locally with `transformers`. It uses
 one vignette (`politics_03`, set by `VIGNETTE_ID`) and 30 conversations drawn
 from its condition cells. politics_03 was chosen because it showed the most
@@ -211,8 +211,8 @@ One-time Ollama setup:
 Then:
 
 ```bash
-uv run python belief_revision_minimal_llama.py --n 2   # quick check
-uv run python belief_revision_minimal_llama.py         # full 30 conversations
+uv run python old/belief_revision_minimal_llama.py --n 2   # quick check
+uv run python old/belief_revision_minimal_llama.py         # full 30 conversations
 ```
 
 It writes `belief_revision_results_minimal_llama1b_<vignette>.csv` and
