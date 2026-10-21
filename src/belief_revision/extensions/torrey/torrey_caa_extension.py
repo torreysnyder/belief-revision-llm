@@ -3,6 +3,8 @@
 This adapter captures residual-stream activations during the existing assistant
 generation.  It writes raw per-conversation tensors and metadata for Torrey's
 pairing pipeline; it does not construct controls, differences, or CAA vectors.
+Note that this script does not load the contrastive core/auxiliary prompt pairs.
+Here activations are captured for the original vignettes.
 """
 
 from ...core.models import (
