@@ -11,7 +11,7 @@ from .models import (
 )
 from dotenv import load_dotenv
 from functools import lru_cache
-from nnsight import LanguageModel
+from nnsight import CONFIG, LanguageModel
 from nnsight import save as nnsight_save
 from openai import OpenAI
 
@@ -56,8 +56,12 @@ def prepare_messages_for_model(
 def require_ndif_key() -> None:
     """Raise a clear error when NDIF authentication is not configured."""
 
-    if not os.getenv("NDIF_API_KEY"):
+    api_key = os.getenv("NDIF_API_KEY")
+    if not api_key:
         raise RuntimeError("NDIF_API_KEY is missing. Add it to the local .env file.")
+
+    # nnsight reads the key once at import, before load_dotenv() has run here.
+    CONFIG.API.APIKEY = api_key
 
 
 @lru_cache(maxsize=None)

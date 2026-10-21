@@ -116,6 +116,9 @@ def test_key_model_and_prompt(monkeypatch):
     with pytest.raises(RuntimeError, match="NDIF_API_KEY"):
         llm.require_ndif_key()
     monkeypatch.setenv("NDIF_API_KEY", "key")
+    monkeypatch.setattr(llm.CONFIG.API, "APIKEY", "")
+    llm.require_ndif_key()
+    assert llm.CONFIG.API.APIKEY == "key"
     created = []
     monkeypatch.setattr(llm, "LanguageModel", lambda name: created.append(name) or FakeModel())
     llm.get_model.cache_clear()
