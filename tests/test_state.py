@@ -1,7 +1,6 @@
 import random
-
-from belief_revision.models import EvidenceItem
-from belief_revision.state import (
+from belief_revision.core.models import EvidenceItem
+from belief_revision.core.state import (
     activate_mentioned_auxiliaries,
     auxiliary_invoked_in_text,
     init_user_state,
@@ -21,9 +20,7 @@ def test_init_and_every_state_update_branch():
     assert update_user_state(rng, state) is state
     update_user_state(rng, state, "core_disconfirming", strong)
     update_user_state(rng, state, "core_disconfirming", moderate)
-    update_user_state(
-        rng, state, "core_disconfirming", EvidenceItem("w", "weak", "weak")
-    )
+    update_user_state(rng, state, "core_disconfirming", EvidenceItem("w", "weak", "weak"))
     update_user_state(rng, state, "core_supporting", supporting)
     update_user_state(rng, state, "core_ambiguous", ambiguous)
     update_user_state(rng, state, "auxiliary", auxiliary)

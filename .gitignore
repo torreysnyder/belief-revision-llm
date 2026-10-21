@@ -30,3 +30,4 @@ env/
 belief_revision_results_full_crossed.csv
 dialogues_full_crossed.jsonl
 output_full_crossed/
+activation_steering_pipeline/activations/live_captures/

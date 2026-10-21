@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
-
-from belief_revision.models import (
+from belief_revision.core.models import (
     Auxiliary,
     EvidenceItem,
     PrimaryCell,
@@ -12,6 +9,7 @@ from belief_revision.models import (
     StyleProfile,
     Vignette,
 )
+from dataclasses import replace
 
 
 @pytest.fixture
@@ -36,9 +34,7 @@ def vignette() -> Vignette:
         ],
         auxiliary_evidence=[
             EvidenceItem("E_aux_1", "Auxiliary evidence", "strong", targets=["A1"]),
-            EvidenceItem(
-                "E_aux_2", "Other auxiliary evidence", "strong", targets=["A2"]
-            ),
+            EvidenceItem("E_aux_2", "Other auxiliary evidence", "strong", targets=["A2"]),
         ],
     )
 

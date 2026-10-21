@@ -1,10 +1,12 @@
-import random
-
 import pytest
-
-from belief_revision import conversation
-from belief_revision.models import BehavioralProbeResult, DialogueTurn
-from belief_revision.state import init_user_state
+import random
+from belief_revision.core import conversation
+from belief_revision.core.models import (
+    BehavioralProbeResult,
+    DialogueTurn,
+    ModelGeneration,
+)
+from belief_revision.core.state import init_user_state
 
 
 class FirstChoice:
@@ -23,13 +25,9 @@ def test_recent_json_and_gate(vignette):
 
     state = init_user_state("curious", "low", "challenge", "low")
     assert not conversation.should_inject_auxiliary_evidence(state, None)
-    assert not conversation.should_inject_auxiliary_evidence(
-        state, vignette.auxiliary_evidence[0]
-    )
+    assert not conversation.should_inject_auxiliary_evidence(state, vignette.auxiliary_evidence[0])
     state.active_auxiliaries.append("A1")
-    assert conversation.should_inject_auxiliary_evidence(
-        state, vignette.auxiliary_evidence[0]
-    )
+    assert conversation.should_inject_auxiliary_evidence(state, vignette.auxiliary_evidence[0])
 
 
 @pytest.mark.parametrize(
@@ -52,9 +50,7 @@ def test_recent_json_and_gate(vignette):
     ],
 )
 def test_choose_dialogue_act(phase, role, goal, expected):
-    assert (
-        conversation.choose_dialogue_act(FirstChoice(), phase, role, goal) == expected
-    )
+    assert conversation.choose_dialogue_act(FirstChoice(), phase, role, goal) == expected
 
 
 def test_prompt_wrappers_and_probe(monkeypatch, vignette, style):
@@ -66,20 +62,11 @@ def test_prompt_wrappers_and_probe(monkeypatch, vignette, style):
         return template.name
 
     monkeypatch.setattr(conversation, "render_prompt", fake_render)
-    assert (
-        conversation.make_user_sim_system_prompt(vignette, style, state)
-        == "user_simulator_system"
-    )
+    assert conversation.make_user_sim_system_prompt(vignette, style, state) == "user_simulator_system"
     assert conversation.make_target_system_prompt() == "target_system"
     assert conversation.make_probe_system_prompt() == "behavioral_probe_system"
-    assert (
-        conversation.build_probe_user_prompt(vignette, [], "intro")
-        == "behavioral_probe_user"
-    )
-    assert (
-        conversation.build_user_intro_core_prompt(vignette, [], style, state)
-        == "user_intro"
-    )
+    assert conversation.build_probe_user_prompt(vignette, [], "intro") == "behavioral_probe_user"
+    assert conversation.build_user_intro_core_prompt(vignette, [], style, state) == "user_intro"
     assert (
         conversation.build_user_turn_planner_prompt(
             random.Random(1),
@@ -94,10 +81,7 @@ def test_prompt_wrappers_and_probe(monkeypatch, vignette, style):
         )
         == "user_turn_planner"
     )
-    assert (
-        conversation.build_user_turn_realizer_prompt({}, style, [])
-        == "user_turn_realizer"
-    )
+    assert conversation.build_user_turn_realizer_prompt({}, style, []) == "user_turn_realizer"
     assert calls
 
     assert conversation.parse_probe_json("not json", "intro").explanation == "not json"
@@ -105,60 +89,54 @@ def test_prompt_wrappers_and_probe(monkeypatch, vignette, style):
     assert parsed.belief_core == 42
 
     monkeypatch.setattr(
-        conversation, "call_model", lambda *args, **kwargs: '{"belief_core": 60}'
+        conversation,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration('{"belief_core": 60}'),
     )
     assert conversation.run_probe(vignette, [], "intro").belief_core == 60
 
 
 def test_generate_user_turn_paths(monkeypatch, vignette, style):
     state = init_user_state("curious", "low", "challenge", "low")
-    monkeypatch.setattr(
-        conversation, "make_user_sim_system_prompt", lambda *args: "system"
-    )
-    monkeypatch.setattr(
-        conversation, "build_user_intro_core_prompt", lambda *args: "intro"
-    )
-    monkeypatch.setattr(
-        conversation, "build_user_turn_planner_prompt", lambda *args: "planner"
-    )
-    monkeypatch.setattr(
-        conversation, "build_user_turn_realizer_prompt", lambda *args: "realizer"
-    )
+    monkeypatch.setattr(conversation, "make_user_sim_system_prompt", lambda *args: "system")
+    monkeypatch.setattr(conversation, "build_user_intro_core_prompt", lambda *args: "intro")
+    monkeypatch.setattr(conversation, "build_user_turn_planner_prompt", lambda *args: "planner")
+    monkeypatch.setattr(conversation, "build_user_turn_realizer_prompt", lambda *args: "realizer")
 
-    responses = iter(["intro result", "bad json", "realized"])
-    monkeypatch.setattr(
-        conversation, "call_model", lambda *args, **kwargs: next(responses)
+    responses = iter(
+        [
+            ModelGeneration("intro result"),
+            ModelGeneration("bad json"),
+            ModelGeneration("realized"),
+        ]
     )
-    intro = conversation.generate_user_turn(
-        random.Random(1), vignette, {"name": "intro"}, 0, None, None, [], style, state
-    )
+    monkeypatch.setattr(conversation, "call_model", lambda *args, **kwargs: next(responses))
+    intro = conversation.generate_user_turn(random.Random(1), vignette, {"name": "intro"}, 0, None, None, [], style, state)
     assert intro == "intro result"
-    later = conversation.generate_user_turn(
-        random.Random(1), vignette, {"name": "closing"}, 0, None, None, [], style, state
-    )
+    later = conversation.generate_user_turn(random.Random(1), vignette, {"name": "closing"}, 0, None, None, [], style, state)
     assert later == "realized"
 
 
 def test_probe_fields():
     empty = conversation.probe_result_fields(None)
     assert empty["belief_core"] is None
-    fields = conversation.probe_result_fields(
-        BehavioralProbeResult("intro", belief_core=40, explanation="why")
-    )
+    fields = conversation.probe_result_fields(BehavioralProbeResult("intro", belief_core=40, explanation="why"))
     assert fields["belief_core"] == 40
     assert fields["probe_explanation"] == "why"
 
 
-def test_complete_conversation_without_remote_calls(
-    monkeypatch, primary_cell, run_plan
-):
+def test_complete_conversation_without_remote_calls(monkeypatch, primary_cell, run_plan):
     monkeypatch.setattr(conversation, "make_target_system_prompt", lambda: "target")
     monkeypatch.setattr(
         conversation,
         "generate_user_turn",
         lambda **kwargs: "Clinical studies support the treatment",
     )
-    monkeypatch.setattr(conversation, "call_model", lambda *args, **kwargs: "assistant")
+    monkeypatch.setattr(
+        conversation,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration("assistant"),
+    )
     monkeypatch.setattr(
         conversation,
         "run_probe",
@@ -172,6 +150,44 @@ def test_complete_conversation_without_remote_calls(
     assert any(row["aux_gate_passed"] is True for row in result.result_rows)
 
 
+def test_complete_conversation_can_skip_evaluator(monkeypatch, primary_cell, run_plan):
+    monkeypatch.setattr(conversation, "make_target_system_prompt", lambda: "target")
+    monkeypatch.setattr(
+        conversation,
+        "generate_user_turn",
+        lambda **kwargs: "Clinical studies support the treatment",
+    )
+    monkeypatch.setattr(
+        conversation,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration("assistant"),
+    )
+    monkeypatch.setattr(
+        conversation,
+        "run_probe",
+        lambda **kwargs: pytest.fail("disabled evaluator must not run"),
+    )
+
+    result = conversation.run_one_vignette(
+        primary_cell,
+        run_plan,
+        evaluator_mode="disabled",
+    )
+
+    assert result.probe_outputs == []
+    assert all(not row["probe_ran_after_turn"] for row in result.result_rows)
+    assert all(row["belief_core"] is None for row in result.result_rows)
+
+
+def test_unknown_evaluator_mode_fails(primary_cell, run_plan):
+    with pytest.raises(ValueError, match="unknown evaluator mode"):
+        conversation.run_one_vignette(
+            primary_cell,
+            run_plan,
+            evaluator_mode="unknown",
+        )
+
+
 def test_complete_conversation_gate_fails(monkeypatch, primary_cell, run_plan):
     monkeypatch.setattr(
         conversation,
@@ -179,9 +195,11 @@ def test_complete_conversation_gate_fails(monkeypatch, primary_cell, run_plan):
         [{"name": "elaboration_2", "n_turns": 1, "probe_after": False}],
     )
     monkeypatch.setattr(conversation, "make_target_system_prompt", lambda: "target")
+    monkeypatch.setattr(conversation, "generate_user_turn", lambda **kwargs: "no auxiliary terms")
     monkeypatch.setattr(
-        conversation, "generate_user_turn", lambda **kwargs: "no auxiliary terms"
+        conversation,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration("assistant"),
     )
-    monkeypatch.setattr(conversation, "call_model", lambda *args, **kwargs: "assistant")
     result = conversation.run_one_vignette(primary_cell, run_plan)
     assert result.result_rows[0]["aux_gate_passed"] is False
