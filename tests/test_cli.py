@@ -1,16 +1,23 @@
-import runpy
 import sys
-from types import SimpleNamespace
-
+import runpy
 import pytest
-
 from belief_revision.cli import validate_models
+from belief_revision.core.models import ModelGeneration
+from types import SimpleNamespace
 
 
 def test_validate_model_outcomes(monkeypatch, capsys):
-    monkeypatch.setattr(validate_models, "call_model", lambda *args, **kwargs: "OK")
+    monkeypatch.setattr(
+        validate_models,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration("OK"),
+    )
     assert validate_models.validate_model("user", "model")
-    monkeypatch.setattr(validate_models, "call_model", lambda *args, **kwargs: "")
+    monkeypatch.setattr(
+        validate_models,
+        "call_model",
+        lambda *args, **kwargs: ModelGeneration(""),
+    )
     assert not validate_models.validate_model("user", "model")
     monkeypatch.setattr(
         validate_models,
@@ -22,14 +29,10 @@ def test_validate_model_outcomes(monkeypatch, capsys):
 
 
 def test_validate_main_one_all_and_failure(monkeypatch):
-    monkeypatch.setattr(
-        validate_models, "parse_args", lambda: SimpleNamespace(all=False, role="user")
-    )
+    monkeypatch.setattr(validate_models, "parse_args", lambda: SimpleNamespace(all=False, role="user"))
     monkeypatch.setattr(validate_models, "validate_model", lambda *args: True)
     validate_models.main()
-    monkeypatch.setattr(
-        validate_models, "parse_args", lambda: SimpleNamespace(all=True, role=None)
-    )
+    monkeypatch.setattr(validate_models, "parse_args", lambda: SimpleNamespace(all=True, role=None))
     validate_models.main()
     monkeypatch.setattr(validate_models, "validate_model", lambda *args: False)
     with pytest.raises(SystemExit):
@@ -43,5 +46,8 @@ def test_validate_parse_args(monkeypatch):
 
 def test_module_main_guard(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["validate-models", "--user"])
-    monkeypatch.setattr("belief_revision.llm.call_model", lambda *args, **kwargs: "OK")
+    monkeypatch.setattr(
+        "belief_revision.core.llm.call_model",
+        lambda *args, **kwargs: ModelGeneration("OK"),
+    )
     runpy.run_module("belief_revision.cli.validate_models", run_name="__main__")
