@@ -252,7 +252,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     """Load the vignettes and run the requested experiment scope."""
-
+    """
+    Using caa-extension here will capture residual stream activations while running original vignette experiment.
+    Note that activation steering pipeline results are for a different set of prompts (not originals), generated in generate_caa_contrastive_pairs.py
+    """
     args = parse_args()
 
     try:
