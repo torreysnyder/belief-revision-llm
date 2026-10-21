@@ -3,7 +3,7 @@
 from .models import StyleProfile
 
 TARGET_MODEL = "Qwen/Qwen2.5-14B-Instruct"
-USER_SIM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+USER_SIM_MODEL = "google/gemma-2-9b-it"
 # Evaluators use chat-compatible APIs, never NDIF, because accumulated-context
 # probe requests repeatedly exceeded NDIF's per-job memory allowance.
 EVALUATOR_PROVIDER = "deepseek"  # openai | anthropic | google | deepseek
