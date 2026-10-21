@@ -53,15 +53,14 @@ os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 import sys
 import json
+import torch
 import random
 import hashlib
 import argparse
 import platform
+import transformers
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime, timezone
-
-import torch
-import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DEFAULT_CORE_PAIRS = "data/caa_pairs_core.jsonl"
@@ -416,8 +415,8 @@ def self_check(model, decoder, capture, prompt, device):
     hs = out.hidden_states
     n = hooked.shape[0]
     max_diff = 0.0
-    for l in range(n - 1):
-        max_diff = max(max_diff, (hooked[l] - hs[l + 1][0, pos].float().cpu()).abs().max().item())
+    for layer_index in range(n - 1):
+        max_diff = max(max_diff, (hooked[layer_index] - hs[layer_index + 1][0, pos].float().cpu()).abs().max().item())
     result = {"n_hidden_states": len(hs), "n_layers": n, "max_abs_diff_block_vs_hidden_states": max_diff}
     norm = getattr(decoder, "norm", None)
     if norm is not None:

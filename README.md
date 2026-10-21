@@ -8,8 +8,11 @@ multi-turn conversation.
 
 - `scripts/run_experiment.py` runs the migrated NDIF-backed experiment and can
   optionally upload completed records to Supabase.
-- `src/belief_revision/` contains the experiment design, conversation,
-  inference, storage, and reporting modules.
+- `src/belief_revision/core/` contains the stable vanilla experiment design,
+  conversation, and inference modules.
+- `src/belief_revision/extensions/` contains researcher-owned experiment
+  extensions, while `src/belief_revision/persistence/` contains storage and
+  reporting integrations.
 - `analysis_full_crossed.py` analyzes the generated CSV and writes statistical
   tables, model summaries, and figures.
 - `scripts/analyze_reporting.py` prints a compact summary of data uploaded to
@@ -28,9 +31,10 @@ the analysis pipeline. Select the diagram to open the full-resolution version.
 ## Development status
 
 The migrated experiment entry point is `scripts/run_experiment.py`. It uses the
-modules under `src/belief_revision/` for deterministic design, conversation
-execution, NDIF inference, local storage, and optional Supabase reporting. The
-legacy `belief_revision_experiment.py` remains in the repository for reference.
+vanilla system under `src/belief_revision/core/`, optional researcher adapters
+under `src/belief_revision/extensions/`, and storage/reporting integrations
+under `src/belief_revision/persistence/`. The legacy
+`belief_revision_experiment.py` remains in the repository for reference.
 
 Intentional behavioral and functional changes from the legacy implementation
 are tracked in [`diff.md`](diff.md).
@@ -69,8 +73,8 @@ uv run python scripts/run_experiment.py --single-run
 
 This runs one replicate from one primary cell and writes results locally. Model
 roles, replicate counts, and worker defaults are configured in
-`src/belief_revision/config.py`. Omit `--single-run` to run the full configured
-experiment:
+`src/belief_revision/core/defaults.py`. Omit `--single-run` to run the full
+configured experiment:
 
 ```bash
 uv run python scripts/run_experiment.py
@@ -96,6 +100,7 @@ values in `.env`:
 ```bash
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-server-side-secret-key
+SUPABASE_DB_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 ```
 
 Do not expose or commit the secret key. The database schema is versioned under
@@ -107,17 +112,18 @@ Run locally without uploading:
 uv run python scripts/run_experiment.py --single-run
 ```
 
-Run the same test and upload its completed records:
+Run the same test and upload its completed records. When an extension produces
+artifacts, reporting also uploads their binary files to the private
+`experiment-artifacts` Storage bucket and indexes their metadata in Postgres:
 
 ```bash
 uv run python scripts/run_experiment.py --single-run --reporting true
 ```
 
 `--reporting false` is equivalent to omitting the flag. Local result files are
-written in either mode. The `experiment_artifacts` table reserves metadata for
-later chain-of-thought, activation, steering, and SAE outputs; large tensors or
-other binary artifacts should be stored outside Postgres and referenced by
-bucket and path.
+written in either mode. `experiment_artifacts` links each binary object to its
+conversation. `activation_captures` indexes turn-, layer-, token-, shape-, and
+dtype-level metadata while the tensors remain in Storage.
 
 Print a basic summary of the uploaded data:
 
@@ -127,6 +133,39 @@ uv run python scripts/analyze_reporting.py
 
 The summary includes run, conversation, turn, probe, and artifact counts;
 status and model breakdowns; and the first and latest run timestamps.
+
+Notebook and analysis code can use `ResearchData` from
+`src/belief_revision/persistence/client.py` to list reporting tables, download
+complete tables, apply equality filters, and inspect named SQL under
+`supabase/queries/`.
+The `evaluation_components` query returns each completed conversation with its
+ordered turns, behavioral probes, artifact locations, and activation metadata.
+Extension-owned SQL lives under `src/belief_revision/extensions/<name>/sql/`
+and is registered as `<name>.<filename>`. Torrey's `torrey.custom` query builds
+on `evaluation_components` and returns only conversations with Torrey CAA
+captures plus turn, probe, and activation counts.
+Named SQL uses `SUPABASE_DB_URL` and always executes inside a read-only
+transaction. Ordinary table downloads continue to use the Data API and do not
+require the Postgres connection string.
+
+### Research extensions
+
+The base command runs the vanilla experiment. Load a registered researcher
+extension with a repeatable `--extension` flag. Torrey's activation-capture
+adapter has a checked-in YAML configuration:
+
+```bash
+uv run python scripts/run_experiment.py \
+  --single-run \
+  --extension torrey-caa \
+  --config configs/torrey-caa.yaml
+```
+
+Add `--reporting true` to upload the completed conversation and its activation
+artifact. Extension hooks execute in the order supplied on the command line.
+Torrey's defaults capture the configured turns and layers into
+`activation_steering_pipeline/activations/live_captures/`; that generated
+directory is ignored by Git.
 
 ## Run the analysis
 
@@ -170,16 +209,20 @@ inference jobs or modify live reporting data.
 4. Create a Hugging Face read token and copy it into `HF_TOKEN` in `.env`.
 5. Accept the license for each gated Hugging Face model you plan to use.
 
-The migrated entry point uses NDIF for all three model roles. Model availability
-depends on current deployment status and the access level associated with the
-API key.
+The migrated entry point uses NDIF for the simulated user and target assistant.
+The behavioral evaluator uses the API provider and model selected in the YAML
+configuration; NDIF is deliberately not an evaluator option because its
+accumulated-context probe requests repeatedly exceeded per-job memory limits.
 
 The behavioral evaluator receives the complete accumulated dialogue at each
 configured checkpoint. Long evaluator prompts can exceed NDIF's per-job memory
 allowance even without request batching. The temporary global response-token
-and prompt-length caps in `src/belief_revision/llm.py` are currently disabled;
-full-context runs may therefore require a larger NDIF allocation, a smaller
-evaluator, or a future evaluation path based on validated activation probes.
+and prompt-length caps in `src/belief_revision/core/llm.py` are currently
+disabled. Full-context evaluator runs therefore require a configured provider
+API key, or a future evaluation path based on validated activation probes.
+For activation-only or mechanical smoke runs, pass `--evaluator-mode disabled`
+to skip behavioral evaluator calls. Conversation generation and extension
+hooks still run normally, while behavioral probe fields remain empty.
 
 ## Verify the NDIF setup
 
@@ -197,8 +240,9 @@ Confirm that NNsight is installed and importable:
 uv run python -c "import nnsight; print(nnsight.__version__)"
 ```
 
-Submit one remote generation for each model role configured in
-`src/belief_revision/config.py`:
+Submit one live generation for each model role configured in
+`src/belief_revision/core/defaults.py`. User and assistant validation use NDIF;
+evaluator validation uses its configured API provider:
 
 ```bash
 uv run validate-models --user

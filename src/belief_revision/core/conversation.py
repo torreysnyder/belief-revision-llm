@@ -1,9 +1,25 @@
 import json
 import random
-from dataclasses import asdict
-from typing import Any
-
-from .config import EVALUATOR_MODEL, PHASES, TARGET_MODEL, USER_SIM_MODEL
+from ..extensions import (
+    CompletedConversationContext,
+    CompletedPhaseContext,
+    ConversationContext,
+    ConversationExtension,
+    GenerationContext,
+    PhaseContext,
+    TurnContext,
+    collect_activation_capture_plan,
+    dispatch_extensions,
+    route_activation_captures,
+)
+from .defaults import (
+    EVALUATOR_MAX_TOKENS,
+    EVALUATOR_MODEL,
+    EVALUATOR_PROVIDER,
+    PHASES,
+    TARGET_MODEL,
+    USER_SIM_MODEL,
+)
 from .design import (
     counterbalance_vignette,
     phase_evidence_role,
@@ -14,6 +30,7 @@ from .models import (
     BehavioralProbeResult,
     ConversationResult,
     DialogueTurn,
+    EvaluatorMode,
     EvidenceItem,
     PrimaryCell,
     RunPlan,
@@ -24,6 +41,10 @@ from .models import (
 from .prompt_builder import render_prompt
 from .prompt_registry import PROMPT_TEMPLATES
 from .state import activate_mentioned_auxiliaries, init_user_state, update_user_state
+from collections.abc import Sequence
+from copy import deepcopy
+from dataclasses import asdict
+from typing import Any
 
 
 def recent_dialogue(
@@ -240,6 +261,9 @@ def run_probe(
     dialogue_history: list[DialogueTurn],
     phase_name: str,
     previous_probe: BehavioralProbeResult | None = None,
+    evaluator_provider: str = EVALUATOR_PROVIDER,
+    evaluator_model: str = EVALUATOR_MODEL,
+    evaluator_max_tokens: int = EVALUATOR_MAX_TOKENS,
 ) -> BehavioralProbeResult:
     """Run the behavioral evaluator after a configured phase."""
 
@@ -259,14 +283,16 @@ def run_probe(
         },
     ]
 
-    probe_raw = call_model(
-        EVALUATOR_MODEL,
+    probe_generation = call_model(
+        evaluator_model,
         probe_messages,
         temperature=0.0,
+        max_tokens=evaluator_max_tokens,
+        provider=evaluator_provider,
     )
 
     return parse_probe_json(
-        probe_raw,
+        probe_generation.text,
         phase_name,
     )
 
@@ -387,7 +413,7 @@ def generate_user_turn(
             ],
             temperature=0.9,
             max_tokens=180,
-        )
+        ).text
 
     planner_prompt = build_user_turn_planner_prompt(
         rng,
@@ -401,7 +427,7 @@ def generate_user_turn(
         user_state,
     )
 
-    planner_raw = call_model(
+    planner_generation = call_model(
         USER_SIM_MODEL,
         [
             {"role": "system", "content": system_prompt},
@@ -412,7 +438,7 @@ def generate_user_turn(
     )
 
     plan = parse_json_maybe(
-        planner_raw,
+        planner_generation.text,
         {
             "dialogue_act": "brief_reflection",
             "emotion": user_state.affect,
@@ -438,7 +464,7 @@ def generate_user_turn(
         ],
         temperature=0.9,
         max_tokens=180,
-    )
+    ).text
 
 
 def probe_result_fields(
@@ -472,8 +498,16 @@ def probe_result_fields(
 def run_one_vignette(
     primary_cell: PrimaryCell,
     run_plan: RunPlan,
+    extensions: Sequence[ConversationExtension] = (),
+    evaluator_mode: EvaluatorMode = "enabled",
+    evaluator_provider: str = EVALUATOR_PROVIDER,
+    evaluator_model: str = EVALUATOR_MODEL,
+    evaluator_max_tokens: int = EVALUATOR_MAX_TOKENS,
 ) -> ConversationResult:
     """Run one complete conversation replicate."""
+
+    if evaluator_mode not in {"enabled", "disabled"}:
+        raise ValueError(f"unknown evaluator mode: {evaluator_mode!r}")
 
     rng = random.Random(run_plan.seed)
 
@@ -509,7 +543,20 @@ def run_one_vignette(
     global_turn_index = 0
     latest_probe: BehavioralProbeResult | None = None
 
+    conversation_context = ConversationContext(
+        primary_cell=deepcopy(primary_cell),
+        run_plan=deepcopy(run_plan),
+        vignette=deepcopy(vignette),
+        aux_mapping=deepcopy(aux_mapping),
+    )
+    dispatch_extensions(
+        extensions,
+        "before_conversation",
+        deepcopy(conversation_context),
+    )
+
     for phase in PHASES:
+        phase_dialogue_start = len(dialogue_history)
         phase_name = str(phase["name"])
         phase_turn_count = int(phase["n_turns"])
 
@@ -530,10 +577,19 @@ def run_one_vignette(
             if not auxiliary_gate_passed:
                 evidence_item = None
 
-        evidence_turn = (
-            rng.randint(1, phase_turn_count - 1)
-            if evidence_item is not None and phase_turn_count > 1
-            else None
+        evidence_turn = rng.randint(1, phase_turn_count - 1) if evidence_item is not None and phase_turn_count > 1 else None
+
+        phase_context = PhaseContext(
+            conversation=deepcopy(conversation_context),
+            phase_name=phase_name,
+            phase=deepcopy(phase),
+            evidence_item=deepcopy(evidence_item),
+            auxiliary_gate_passed=auxiliary_gate_passed,
+        )
+        dispatch_extensions(
+            extensions,
+            "before_phase",
+            deepcopy(phase_context),
         )
 
         for turn_index in range(phase_turn_count):
@@ -553,6 +609,23 @@ def run_one_vignette(
                 user_state=user_state,
                 evidence_role=evidence_role,
                 evidence_item=current_evidence,
+            )
+
+            before_turn_context = TurnContext(
+                phase=deepcopy(phase_context),
+                turn_in_phase=turn_index + 1,
+                global_turn_index=global_turn_index,
+                inject_evidence=inject_evidence,
+                current_evidence=deepcopy(current_evidence),
+                evidence_role=evidence_role,
+                user_state=deepcopy(user_state),
+                user_text=None,
+                dialogue_history=tuple(deepcopy(dialogue_history)),
+            )
+            dispatch_extensions(
+                extensions,
+                "before_turn",
+                before_turn_context,
             )
 
             user_text = generate_user_turn(
@@ -583,12 +656,8 @@ def run_one_vignette(
                     inject_evidence=inject_evidence,
                     evidence_id=(current_evidence.id if current_evidence else None),
                     evidence_role=evidence_role,
-                    evidence_strength=(
-                        current_evidence.strength if current_evidence else None
-                    ),
-                    evidence_targets=(
-                        current_evidence.targets if current_evidence else None
-                    ),
+                    evidence_strength=(current_evidence.strength if current_evidence else None),
+                    evidence_targets=(current_evidence.targets if current_evidence else None),
                     active_auxiliaries=list(user_state.active_auxiliaries),
                 )
             )
@@ -600,10 +669,75 @@ def run_one_vignette(
                 }
             )
 
-            assistant_text = call_model(
-                TARGET_MODEL,
-                target_messages,
+            user_turn_context = TurnContext(
+                phase=deepcopy(phase_context),
+                turn_in_phase=turn_index + 1,
+                global_turn_index=global_turn_index,
+                inject_evidence=inject_evidence,
+                current_evidence=deepcopy(current_evidence),
+                evidence_role=evidence_role,
+                user_state=deepcopy(user_state),
+                user_text=user_text,
+                dialogue_history=tuple(deepcopy(dialogue_history)),
+            )
+            dispatch_extensions(
+                extensions,
+                "after_user_turn",
+                deepcopy(user_turn_context),
+            )
+
+            before_generation_context = GenerationContext(
+                turn=deepcopy(user_turn_context),
+                model=TARGET_MODEL,
+                messages=tuple(deepcopy(target_messages)),
                 temperature=0.7,
+                max_tokens=500,
+            )
+            dispatch_extensions(
+                extensions,
+                "before_assistant_generation",
+                before_generation_context,
+            )
+
+            capture_plan = collect_activation_capture_plan(
+                extensions,
+                before_generation_context,
+            )
+
+            if capture_plan.backend_requests:
+                assistant_generation = call_model(
+                    TARGET_MODEL,
+                    target_messages,
+                    temperature=0.7,
+                    capture_requests=capture_plan.backend_requests,
+                )
+            else:
+                assistant_generation = call_model(
+                    TARGET_MODEL,
+                    target_messages,
+                    temperature=0.7,
+                )
+            assistant_text = assistant_generation.text
+
+            after_generation_context = GenerationContext(
+                turn=deepcopy(user_turn_context),
+                model=TARGET_MODEL,
+                messages=tuple(deepcopy(target_messages)),
+                temperature=0.7,
+                max_tokens=500,
+                response=assistant_text,
+            )
+
+            route_activation_captures(
+                capture_plan,
+                after_generation_context,
+                assistant_generation,
+            )
+
+            dispatch_extensions(
+                extensions,
+                "after_assistant_generation",
+                after_generation_context,
             )
 
             target_messages.append(
@@ -629,12 +763,8 @@ def run_one_vignette(
                     inject_evidence=inject_evidence,
                     evidence_id=(current_evidence.id if current_evidence else None),
                     evidence_role=evidence_role,
-                    evidence_strength=(
-                        current_evidence.strength if current_evidence else None
-                    ),
-                    evidence_targets=(
-                        current_evidence.targets if current_evidence else None
-                    ),
+                    evidence_strength=(current_evidence.strength if current_evidence else None),
+                    evidence_targets=(current_evidence.targets if current_evidence else None),
                     active_auxiliaries=list(user_state.active_auxiliaries),
                 )
             )
@@ -652,17 +782,9 @@ def run_one_vignette(
                 "inject_evidence": inject_evidence,
                 "evidence_id": (current_evidence.id if current_evidence else None),
                 "evidence_role": evidence_role,
-                "evidence_strength": (
-                    current_evidence.strength if current_evidence else None
-                ),
-                "evidence_credibility": (
-                    current_evidence.credibility if current_evidence else None
-                ),
-                "evidence_targets": (
-                    json.dumps(current_evidence.targets)
-                    if current_evidence and current_evidence.targets
-                    else None
-                ),
+                "evidence_strength": (current_evidence.strength if current_evidence else None),
+                "evidence_credibility": (current_evidence.credibility if current_evidence else None),
+                "evidence_targets": (json.dumps(current_evidence.targets) if current_evidence and current_evidence.targets else None),
                 "canonical_to_display_A1": (canonical_to_display["A1"]),
                 "canonical_to_display_A2": (canonical_to_display["A2"]),
                 "display_A1_text": aux_mapping["display_A1_text"],
@@ -681,12 +803,32 @@ def run_one_vignette(
 
             result_rows.append(row)
 
-        if bool(phase["probe_after"]):
+            completed_turn_context = TurnContext(
+                phase=deepcopy(phase_context),
+                turn_in_phase=turn_index + 1,
+                global_turn_index=global_turn_index,
+                inject_evidence=inject_evidence,
+                current_evidence=deepcopy(current_evidence),
+                evidence_role=evidence_role,
+                user_state=deepcopy(user_state),
+                user_text=user_text,
+                dialogue_history=tuple(deepcopy(dialogue_history)),
+            )
+            dispatch_extensions(
+                extensions,
+                "after_turn",
+                completed_turn_context,
+            )
+
+        if bool(phase["probe_after"]) and evaluator_mode == "enabled":
             latest_probe = run_probe(
                 vignette=vignette,
                 dialogue_history=dialogue_history,
                 phase_name=phase_name,
                 previous_probe=latest_probe,
+                evaluator_provider=evaluator_provider,
+                evaluator_model=evaluator_model,
+                evaluator_max_tokens=evaluator_max_tokens,
             )
 
             probe_outputs.append(latest_probe)
@@ -694,7 +836,18 @@ def run_one_vignette(
             result_rows[-1].update(probe_result_fields(latest_probe))
             result_rows[-1]["probe_ran_after_turn"] = True
 
-    return ConversationResult(
+        dispatch_extensions(
+            extensions,
+            "after_phase",
+            CompletedPhaseContext(
+                phase=deepcopy(phase_context),
+                user_state=deepcopy(user_state),
+                dialogue_history=tuple(deepcopy(dialogue_history[phase_dialogue_start:])),
+                latest_probe=deepcopy(latest_probe),
+            ),
+        )
+
+    result = ConversationResult(
         primary_cell=primary_cell,
         run_plan=run_plan,
         aux_mapping=aux_mapping,
@@ -702,3 +855,13 @@ def run_one_vignette(
         probe_outputs=probe_outputs,
         result_rows=result_rows,
     )
+    dispatch_extensions(
+        extensions,
+        "after_conversation",
+        CompletedConversationContext(
+            conversation=deepcopy(conversation_context),
+            result=deepcopy(result),
+        ),
+    )
+    result.artifacts.extend(artifact for extension in extensions for artifact in extension.artifacts())
+    return result

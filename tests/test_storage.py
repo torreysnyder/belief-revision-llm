@@ -1,12 +1,11 @@
 import csv
 import json
-
-from belief_revision.models import (
+from belief_revision.core.models import (
     BehavioralProbeResult,
     ConversationResult,
     DialogueTurn,
 )
-from belief_revision.storage import (
+from belief_revision.persistence.local import (
     build_conversation_record,
     load_vignettes,
     parse_vignette,
@@ -26,9 +25,7 @@ def raw_vignette():
         "core_evidence_disconfirming": [{"id": "d", "text": "d", "strength": "strong"}],
         "core_evidence_supporting": [{"id": "s", "text": "s", "strength": "weak"}],
         "core_evidence_ambiguous": [{"id": "a", "text": "a", "strength": "weak"}],
-        "auxiliary_evidence": [
-            {"id": "x", "text": "x", "strength": "weak", "targets": ["A1"]}
-        ],
+        "auxiliary_evidence": [{"id": "x", "text": "x", "strength": "weak", "targets": ["A1"]}],
     }
 
 

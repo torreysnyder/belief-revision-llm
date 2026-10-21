@@ -1,12 +1,19 @@
 """Remote language-model inference through NDIF."""
 
 import os
-import random
 import time
-from functools import lru_cache
-
+import random
+import anyio.streams.tls  # noqa: F401
+from .models import (
+    ActivationCapture,
+    ActivationCaptureRequest,
+    ModelGeneration,
+)
 from dotenv import load_dotenv
+from functools import lru_cache
 from nnsight import LanguageModel
+from nnsight import save as nnsight_save
+from openai import OpenAI
 
 load_dotenv()
 
@@ -32,12 +39,8 @@ def prepare_messages_for_model(
 
     # TEMPORARY GEMMA SMOKE-TEST SUPPORT: Gemma's chat template rejects the
     # system role, so preserve that content inside the first user message.
-    system_text = "\n\n".join(
-        message["content"] for message in messages if message["role"] == "system"
-    )
-    compatible_messages = [
-        message.copy() for message in messages if message["role"] != "system"
-    ]
+    system_text = "\n\n".join(message["content"] for message in messages if message["role"] == "system")
+    compatible_messages = [message.copy() for message in messages if message["role"] != "system"]
 
     if not system_text:
         return compatible_messages
@@ -81,9 +84,7 @@ def build_chat_prompt(
             add_generation_prompt=True,
         )
     else:
-        formatted_messages = [
-            f"{message['role'].upper()}:\n{message['content']}" for message in messages
-        ]
+        formatted_messages = [f"{message['role'].upper()}:\n{message['content']}" for message in messages]
         prompt = "\n\n".join(formatted_messages) + "\n\nASSISTANT:\n"
 
     # TEMPORARY FULL-FLOW SMOKE TEST: accumulated dialogue exceeds NDIF's
@@ -104,7 +105,8 @@ def generate_remote(
     messages: list[dict[str, str]],
     temperature: float = 0.7,
     max_tokens: int = 500,
-) -> str:
+    capture_requests: tuple[ActivationCaptureRequest, ...] = (),
+) -> ModelGeneration:
     """Generate one response using a remotely hosted NDIF model."""
 
     model = get_model(model_name)
@@ -127,19 +129,50 @@ def generate_remote(
     if temperature > 0:
         generation_options["temperature"] = temperature
 
+    layer_count = len(model.model.layers)
+    capture_specs: list[tuple[ActivationCaptureRequest, int]] = []
+    for request in capture_requests:
+        layers = range(layer_count) if request.layers is None else request.layers
+        for layer in layers:
+            if layer >= layer_count:
+                raise ValueError(f"capture layer {layer} is out of bounds for model with {layer_count} layers")
+            capture_specs.append((request, layer))
+
+    saved_activations = []
     with model.generate(
         prompt,
         remote=True,
         **generation_options,
-    ):
-        output_tokens = model.generator.output.save()
+    ) as tracer:
+        if capture_specs:
+            saved_activations = nnsight_save([])
+        for _ in tracer.iter[0]:
+            for _, layer in capture_specs:
+                saved_activations.append(model.model.layers[layer].output[0, -1, :].float().detach().cpu())
+            output_tokens = tracer.result.save()
 
     generated_tokens = output_tokens[0, prompt_length:]
 
-    return model.tokenizer.decode(
+    text = model.tokenizer.decode(
         generated_tokens,
         skip_special_tokens=True,
     ).strip()
+    activations = tuple(
+        ActivationCapture(
+            request_id=request.request_id,
+            layer=layer,
+            model_name=model_name,
+            location=request.location,
+            token_position=request.token_position,
+            token_index=prompt_length - 1,
+            sequence_length=prompt_length,
+            shape=tuple(tensor.shape),
+            dtype=str(tensor.dtype),
+            tensor=tensor,
+        )
+        for (request, layer), tensor in zip(capture_specs, saved_activations, strict=True)
+    )
+    return ModelGeneration(text=text, activations=activations)
 
 
 NON_RETRYABLE_ERRORS = (
@@ -150,6 +183,16 @@ NON_RETRYABLE_ERRORS = (
     "gated repo",
     "chat template",
 )
+
+API_PROVIDERS = {
+    "openai": ("OPENAI_API_KEY", "https://api.openai.com/v1"),
+    "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/"),
+    "google": (
+        "GOOGLE_API_KEY",
+        "https://generativelanguage.googleapis.com/v1beta/openai/",
+    ),
+    "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com"),
+}
 
 
 def is_retryable_error(error: Exception) -> bool:
@@ -166,8 +209,15 @@ def call_model(
     temperature: float = 0.7,
     max_tokens: int = 500,
     retries: int = 5,
-) -> str:
-    """Generate a response with retries for temporary NDIF failures."""
+    capture_requests: tuple[ActivationCaptureRequest, ...] = (),
+    provider: str = "ndif",
+) -> ModelGeneration:
+    """Route generation to NDIF or a configured chat-compatible API."""
+
+    if provider != "ndif":
+        if capture_requests:
+            raise ValueError("activation capture is only supported through NDIF")
+        return generate_api(provider, model_name, messages, max_tokens, retries)
 
     for attempt in range(retries):
         try:
@@ -176,6 +226,7 @@ def call_model(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                capture_requests=capture_requests,
             )
         except Exception as error:
             if not is_retryable_error(error) or attempt == retries - 1:
@@ -185,3 +236,45 @@ def call_model(
             time.sleep(delay)
 
     raise RuntimeError("NDIF generation failed without returning a response.")
+
+
+def generate_api(
+    provider: str,
+    model_name: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    retries: int,
+) -> ModelGeneration:
+    """Generate through an official chat-compatible provider API."""
+
+    if provider not in API_PROVIDERS:
+        raise ValueError(f"unknown API provider: {provider}")
+    key_name, base_url = API_PROVIDERS[provider]
+    key = os.getenv(key_name)
+    if not key:
+        raise RuntimeError(f"{key_name} is missing. Add it to the local .env file.")
+    if retries < 1:
+        raise ValueError("retries must be at least 1")
+
+    with OpenAI(
+        api_key=key,
+        base_url=base_url,
+        timeout=120.0,
+        max_retries=retries - 1,
+    ) as client:
+        token_parameter = "max_completion_tokens" if provider == "openai" else "max_tokens"
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            **{token_parameter: max_tokens},
+        )
+
+    if not response.choices:
+        raise RuntimeError(f"{provider} returned no completion choices")
+    choice = response.choices[0]
+    if choice.finish_reason == "length":
+        raise RuntimeError("evaluator response was truncated; increase EVALUATOR_MAX_TOKENS")
+    content = choice.message.content
+    if not content or not content.strip():
+        raise RuntimeError(f"{provider} returned an empty response")
+    return ModelGeneration(text=content.strip())

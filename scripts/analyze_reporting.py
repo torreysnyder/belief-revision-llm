@@ -1,10 +1,9 @@
 """Print a compact summary of experiment data stored in Supabase."""
 
+from belief_revision.persistence import create_reporting_client
 from collections import Counter
-from typing import Any
-
-from belief_revision.reporting import create_reporting_client
 from supabase import Client
+from typing import Any
 
 TABLES = {
     "runs": "experiment_runs",
@@ -34,13 +33,7 @@ def fetch_all(
     start = 0
 
     while True:
-        page = (
-            client.table(table)
-            .select(columns)
-            .range(start, start + page_size - 1)
-            .execute()
-            .data
-        )
+        page = client.table(table).select(columns).range(start, start + page_size - 1).execute().data
         rows.extend(page)
 
         if len(page) < page_size:

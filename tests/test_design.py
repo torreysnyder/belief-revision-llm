@@ -1,10 +1,8 @@
-import random
-from dataclasses import replace
-
 import pytest
-
-from belief_revision import design
-from belief_revision.models import Auxiliary
+import random
+from belief_revision.core import design
+from belief_revision.core.models import Auxiliary
+from dataclasses import replace
 
 
 def test_seed_cells_and_plans_are_deterministic(vignette, primary_cell):
@@ -56,9 +54,7 @@ def test_evidence_selection_all_fallbacks(vignette, run_plan, reversed_plan):
     assert first.elaboration_1.id == "E_amb_1"
     assert first.elaboration_2.targets == ["A1"]
 
-    second = design.select_evidence_by_condition(
-        vignette, reversed_plan, random.Random(2)
-    )
+    second = design.select_evidence_by_condition(vignette, reversed_plan, random.Random(2))
     assert second.core_challenge_1.strength == "moderate"
     assert second.elaboration_1.id == "E_core_sup_1"
     assert second.elaboration_2.targets == ["A2"]
@@ -70,9 +66,7 @@ def test_evidence_selection_all_fallbacks(vignette, run_plan, reversed_plan):
         core_evidence_ambiguous=[],
         auxiliary_evidence=[],
     )
-    selected = design.select_evidence_by_condition(
-        sparse, reversed_plan, random.Random(3)
-    )
+    selected = design.select_evidence_by_condition(sparse, reversed_plan, random.Random(3))
     assert selected.elaboration_1 is None
     assert selected.elaboration_2 is None
 
@@ -80,20 +74,13 @@ def test_evidence_selection_all_fallbacks(vignette, run_plan, reversed_plan):
         vignette,
         core_evidence_disconfirming=[vignette.core_evidence_disconfirming[1]],
     )
-    assert (
-        design.select_evidence_by_condition(
-            only_moderate, run_plan, random.Random(3)
-        ).core_challenge_1.strength
-        == "moderate"
-    )
+    assert design.select_evidence_by_condition(only_moderate, run_plan, random.Random(3)).core_challenge_1.strength == "moderate"
 
     untargeted = replace(
         vignette,
         auxiliary_evidence=[replace(vignette.auxiliary_evidence[0], targets=None)],
     )
-    selected = design.select_evidence_by_condition(
-        untargeted, run_plan, random.Random(4)
-    )
+    selected = design.select_evidence_by_condition(untargeted, run_plan, random.Random(4))
     assert selected.elaboration_2.id == "E_aux_1"
 
 
@@ -112,12 +99,7 @@ def test_evidence_selection_all_fallbacks(vignette, run_plan, reversed_plan):
 )
 def test_phase_evidence_role(vignette, phase, evidence_index, expected):
     evidence = None
-    all_evidence = (
-        vignette.core_evidence_disconfirming
-        + vignette.core_evidence_supporting
-        + vignette.core_evidence_ambiguous
-        + vignette.auxiliary_evidence
-    )
+    all_evidence = vignette.core_evidence_disconfirming + vignette.core_evidence_supporting + vignette.core_evidence_ambiguous + vignette.auxiliary_evidence
     if evidence_index is not None:
         evidence = all_evidence[evidence_index]
     assert design.phase_evidence_role(phase, evidence) == expected

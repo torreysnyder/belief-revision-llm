@@ -729,6 +729,108 @@ been shown to have a robust causal behavioral effect.
 
 ------------------------------------------------------------------------
 
+## Running the current pipeline
+
+Run commands from the repository root through the locked `uv` environment.
+The pair generator now uses the migrated implementation under
+`src/belief_revision/core/`; it no longer depends on the unavailable legacy
+`belief_revision_experiment_qwen.py` module.
+
+Verify the bundled pilot and pair-building mechanics without making model
+requests:
+
+```bash
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --offline \
+  --no-render \
+  --out-dir .tmp/caa-smoke
+```
+
+Generate a bounded live sample with the configured user model:
+
+```bash
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --budget 10 \
+  --no-render \
+  --out-dir .tmp/caa-online-smoke
+```
+
+Remove `--limit 1` and choose an appropriate budget and output directory when
+generating the full pair dataset.
+
+Then run a limited activation-extraction smoke test:
+
+```bash
+uv run python activation_steering_pipeline/extract_caa_activations.py \
+  --limit 4 \
+  --out-dir activation_steering_pipeline/activations_smoke
+```
+
+The offline check intentionally cannot create new rewrites. Full activation
+extraction therefore requires the generated `caa_pairs_core.jsonl` and
+`caa_pairs_auxiliary.jsonl` files from the online pair-generation step.
+
+### Branch handoff and validation
+
+If you have local changes, save them before switching branches:
+
+```bash
+git status --short
+git stash push --include-untracked -m "WIP before CAA integration validation"
+```
+
+Fetch the integration branch and switch to it:
+
+```bash
+git fetch origin
+git switch --track origin/caa-pipeline-cleanup
+git pull --ff-only
+uv sync
+```
+
+If the branch already exists locally, use `git switch caa-pipeline-cleanup`
+instead of the `--track` command.
+
+Validate the repository and the pair-building mechanics without making model
+requests:
+
+```bash
+uv run ruff check .
+uv run pytest
+uv run python activation_steering_pipeline/generate_caa_contrastive_pairs.py \
+  --limit 1 \
+  --offline \
+  --no-render \
+  --out-dir .tmp/caa-smoke
+```
+
+Optionally run the bounded live pair-generation check shown above. If the
+results are good, merge this branch into the CAA working branch and push it:
+
+```bash
+git switch torreysnyder-caa-pipeline
+git pull --ff-only
+git merge --no-ff caa-pipeline-cleanup
+git push origin torreysnyder-caa-pipeline
+```
+
+After reviewing the integrated branch, merge it into `main` through the team's
+normal GitHub workflow. Restore the saved work on the branch where it belongs:
+
+```bash
+git switch torreysnyder-caa-pipeline
+git stash list
+git stash pop
+```
+
+Resolve any conflicts, rerun the checks above, and commit the restored work
+normally. Git retains the stash automatically if `stash pop` encounters a
+conflict.
+
+------------------------------------------------------------------------
+
 ## Expected artifacts
 
 A clean implementation should produce separate, versioned artifacts

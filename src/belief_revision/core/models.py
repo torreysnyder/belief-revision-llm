@@ -1,5 +1,60 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+
+EvaluatorMode = Literal["enabled", "disabled"]
+
+if TYPE_CHECKING:
+    from torch import Tensor
+else:
+    Tensor = Any
+
+
+@dataclass(frozen=True)
+class ActivationCaptureRequest:
+    """A request to capture residual-stream activations during generation."""
+
+    request_id: str
+    layers: tuple[int, ...] | None = None
+    location: Literal["residual_post"] = "residual_post"
+    token_position: Literal["final_prompt_token"] = "final_prompt_token"
+
+    def __post_init__(self) -> None:
+        if not self.request_id:
+            raise ValueError("request_id must not be empty")
+        if self.location != "residual_post":
+            raise ValueError("location must be 'residual_post'")
+        if self.token_position != "final_prompt_token":
+            raise ValueError("token_position must be 'final_prompt_token'")
+        if self.layers is not None:
+            if any(layer < 0 for layer in self.layers):
+                raise ValueError("layers must contain only nonnegative indices")
+            if len(set(self.layers)) != len(self.layers):
+                raise ValueError("layers must not contain duplicate indices")
+
+
+@dataclass(frozen=True)
+class ActivationCapture:
+    """One activation captured from the same execution as generated text."""
+
+    request_id: str
+    layer: int
+    model_name: str
+    location: Literal["residual_post"]
+    token_position: Literal["final_prompt_token"]
+    token_index: int
+    sequence_length: int
+    shape: tuple[int, ...]
+    dtype: str
+    tensor: Tensor
+
+
+@dataclass(frozen=True)
+class ModelGeneration:
+    """Generated text and any activations captured during that execution."""
+
+    text: str
+    activations: tuple[ActivationCapture, ...] = ()
 
 
 @dataclass
@@ -142,6 +197,33 @@ class DialogueTurn:
     active_auxiliaries: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ActivationArtifactRecord:
+    """Queryable metadata for one turn's captured activation tensors."""
+
+    global_turn_index: int
+    phase: str
+    turn_in_phase: int
+    model_name: str
+    location: str
+    token_position: str
+    layers: tuple[int, ...]
+    token_indices: tuple[int, ...]
+    sequence_lengths: tuple[int, ...]
+    tensor_shapes: tuple[tuple[int, ...], ...]
+    tensor_dtypes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExperimentArtifact:
+    """A local experiment artifact and the metadata needed to report it."""
+
+    artifact_type: str
+    local_path: Path
+    metadata: dict[str, object] = field(default_factory=dict)
+    activation_records: tuple[ActivationArtifactRecord, ...] = ()
+
+
 @dataclass
 class ConversationResult:
     """The complete output from one conversation replicate."""
@@ -152,6 +234,7 @@ class ConversationResult:
     probe_outputs: list[BehavioralProbeResult]
     result_rows: list[dict[str, object]]
     aux_mapping: dict[str, object]
+    artifacts: list[ExperimentArtifact] = field(default_factory=list)
 
 
 @dataclass

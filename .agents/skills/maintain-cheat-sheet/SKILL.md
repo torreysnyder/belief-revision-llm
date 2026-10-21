@@ -10,7 +10,7 @@ code changes.
 
 1. Inspect the changed implementation rather than copying commands from prior
    conversation context. In particular, check `scripts/`, `pyproject.toml`,
-   `src/belief_revision/config.py`, CLI argument definitions, and `sample.env`
+   `src/belief_revision/core/defaults.py`, CLI argument definitions, and `sample.env`
    when they are affected.
 2. Update only the cheat-sheet sections affected by the change. Add a concise
    entry when a new routine command or user-facing configuration location is
