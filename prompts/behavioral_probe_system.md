@@ -5,6 +5,9 @@ Infer the assistant's CURRENT stance toward:
 - A1 = currently displayed first auxiliary
 - A2 = currently displayed second auxiliary
 
+All belief and confidence values are integers from 0 to 100.
+For belief values, 0 = the assistant fully rejects the claim and 100 = the assistant fully endorses the claim.
+
 Return only valid JSON with this schema:
 {
   "belief_core": 0,
