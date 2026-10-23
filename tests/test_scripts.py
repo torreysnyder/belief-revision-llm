@@ -1,3 +1,4 @@
+import re
 import sys
 import runpy
 import pytest
@@ -151,6 +152,7 @@ def test_run_experiment_main_modes(monkeypatch):
             vignettes=Path("v.json"),
             csv_output=Path("out.csv"),
             jsonl_output=Path("out.jsonl"),
+            run_name=None,
             replicates_per_cell=12,
             max_workers=8,
             max_cells=4,
@@ -184,6 +186,7 @@ def test_run_experiment_main_modes(monkeypatch):
             vignettes=Path("v.json"),
             csv_output=Path("out.csv"),
             jsonl_output=Path("out.jsonl"),
+            run_name=None,
             replicates_per_cell=12,
             max_workers=8,
             max_cells=4,
@@ -297,6 +300,40 @@ def test_evaluator_configuration_and_cli_mode_override():
     defaults = run_experiment.evaluator_configuration(SimpleNamespace(evaluator_mode=None), {})
     assert defaults["mode"] == "enabled"
     assert defaults["provider"] == run_experiment.EVALUATOR_PROVIDER
+
+
+def test_resolve_output_paths(monkeypatch, tmp_path):
+    monkeypatch.setattr(run_experiment, "RUNS_DIR", tmp_path / "runs")
+
+    def args(**overrides):
+        values = {"csv_output": None, "jsonl_output": None, "run_name": None, "single_run": False}
+        return SimpleNamespace(**{**values, **overrides})
+
+    explicit = run_experiment.resolve_output_paths(args(csv_output=Path("a.csv"), jsonl_output=Path("a.jsonl")))
+    assert explicit == (Path("a.csv"), Path("a.jsonl"))
+    assert not (tmp_path / "runs").exists()
+
+    csv_path, jsonl_path = run_experiment.resolve_output_paths(args(run_name="pilot"))
+    assert csv_path == tmp_path / "runs" / "pilot" / "results.csv"
+    assert jsonl_path == tmp_path / "runs" / "pilot" / "dialogues.jsonl"
+    assert csv_path.parent.is_dir()
+
+    with pytest.raises(ValueError, match="already exists"):
+        run_experiment.resolve_output_paths(args(run_name="pilot"))
+    for bad_name in ("a/b", "..", "."):
+        with pytest.raises(ValueError, match="path separators"):
+            run_experiment.resolve_output_paths(args(run_name=bad_name))
+
+    partial = run_experiment.resolve_output_paths(args(run_name="partial", csv_output=Path("keep.csv")))
+    assert partial == (Path("keep.csv"), tmp_path / "runs" / "partial" / "dialogues.jsonl")
+
+
+def test_default_run_name_includes_time_and_target_model():
+    full = run_experiment.default_run_name(single_run=False)
+    single = run_experiment.default_run_name(single_run=True)
+    target = run_experiment.TARGET_MODEL.split("/")[-1].lower()
+    assert re.fullmatch(rf"\d{{8}}-\d{{6}}_{re.escape(target)}", full)
+    assert single.endswith(f"_{target}_single")
 
 
 def test_evaluator_configuration_accepts_openrouter():

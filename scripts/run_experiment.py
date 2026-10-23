@@ -8,13 +8,46 @@ from belief_revision.core.defaults import (
     EVALUATOR_PROVIDER,
     MAX_WORKERS,
     REPLICATES_PER_PRIMARY_CELL,
+    TARGET_MODEL,
 )
 from belief_revision.core.llm import API_PROVIDERS
 from belief_revision.core.runner import run_experiment
 from belief_revision.extensions import resolve_extension_factories
 from belief_revision.extensions.torrey import DEFAULT_OUTPUT_DIR
 from belief_revision.persistence import load_vignettes
+from datetime import datetime, timezone
 from pathlib import Path
+
+RUNS_DIR = Path("runs")
+
+
+def default_run_name(single_run: bool) -> str:
+    """Name a run by UTC start time and target model so runs sort and compare."""
+
+    started = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    name = f"{started}_{TARGET_MODEL.split('/')[-1].lower()}"
+    return f"{name}_single" if single_run else name
+
+
+def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+    """Return CSV and JSONL paths, giving each run its own folder by default."""
+
+    if args.csv_output is not None and args.jsonl_output is not None:
+        return args.csv_output, args.jsonl_output
+
+    run_name = args.run_name or default_run_name(args.single_run)
+    if Path(run_name).name != run_name or run_name in {".", ".."}:
+        raise ValueError("run name must not contain path separators")
+    run_dir = RUNS_DIR / run_name
+    if run_dir.exists():
+        raise ValueError(f"run directory already exists: {run_dir}")
+    run_dir.mkdir(parents=True)
+    print(f"Saving this run under {run_dir}")
+
+    return (
+        args.csv_output or run_dir / "results.csv",
+        args.jsonl_output or run_dir / "dialogues.jsonl",
+    )
 
 
 def parse_bool(value: str) -> bool:
@@ -170,14 +203,21 @@ def parse_args() -> argparse.Namespace:
         default=Path("vignettes_revised.json"),
     )
     parser.add_argument(
+        "--run-name",
+        default=None,
+        help="Folder name under runs/ for this run's outputs (default: timestamp and target model).",
+    )
+    parser.add_argument(
         "--csv-output",
         type=Path,
-        default=Path("belief_revision_results_full_crossed.csv"),
+        default=None,
+        help="Override the results CSV path (default: runs/<run-name>/results.csv).",
     )
     parser.add_argument(
         "--jsonl-output",
         type=Path,
-        default=Path("dialogues_full_crossed.jsonl"),
+        default=None,
+        help="Override the dialogues JSONL path (default: runs/<run-name>/dialogues.jsonl).",
     )
     parser.add_argument(
         "--replicates-per-cell",
@@ -266,6 +306,7 @@ def main() -> None:
             args.extension,
             configurations={"torrey-caa": torrey_caa_configuration(args, extension_configuration(config))},
         )
+        csv_path, jsonl_path = resolve_output_paths(args)
     except ValueError as error:
         raise SystemExit(f"error: {error}") from error
 
@@ -277,8 +318,8 @@ def main() -> None:
 
     run_experiment(
         vignettes=vignettes,
-        csv_path=args.csv_output,
-        jsonl_path=args.jsonl_output,
+        csv_path=csv_path,
+        jsonl_path=jsonl_path,
         replicates_per_cell=replicates_per_cell,
         max_workers=max_workers,
         max_cells=max_cells,
