@@ -299,6 +299,13 @@ def test_evaluator_configuration_and_cli_mode_override():
     assert defaults["provider"] == run_experiment.EVALUATOR_PROVIDER
 
 
+def test_evaluator_configuration_accepts_openrouter():
+    config = {"evaluator": {"provider": "openrouter", "model": "deepseek/deepseek-chat"}}
+    selected = run_experiment.evaluator_configuration(SimpleNamespace(evaluator_mode=None), config)
+    assert selected["provider"] == "openrouter"
+    assert selected["model"] == "deepseek/deepseek-chat"
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [

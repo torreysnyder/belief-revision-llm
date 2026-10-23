@@ -6,12 +6,14 @@ TARGET_MODEL = "Qwen/Qwen2.5-14B-Instruct"
 USER_SIM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 # Evaluators use chat-compatible APIs, never NDIF, because accumulated-context
 # probe requests repeatedly exceeded NDIF's per-job memory allowance.
-EVALUATOR_PROVIDER = "deepseek"  # openai | anthropic | google | deepseek
+EVALUATOR_PROVIDER = "deepseek"  # openai | anthropic | google | deepseek | openrouter
 EVALUATOR_MODELS = {
     "openai": "gpt-4.1-mini",
     "anthropic": "claude-sonnet-4-6",
     "google": "gemini-2.5-flash",
     "deepseek": "deepseek-chat",
+    # OpenRouter model IDs are prefixed with the upstream provider.
+    "openrouter": "deepseek/deepseek-chat",
 }
 EVALUATOR_MODEL = EVALUATOR_MODELS[EVALUATOR_PROVIDER]
 EVALUATOR_MAX_TOKENS = 4096
