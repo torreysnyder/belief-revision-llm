@@ -196,6 +196,7 @@ API_PROVIDERS = {
         "https://generativelanguage.googleapis.com/v1beta/openai/",
     ),
     "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com"),
+    "openrouter": ("OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"),
 }
 
 

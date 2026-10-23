@@ -9,6 +9,7 @@ from belief_revision.core.defaults import (
     MAX_WORKERS,
     REPLICATES_PER_PRIMARY_CELL,
 )
+from belief_revision.core.llm import API_PROVIDERS
 from belief_revision.core.runner import run_experiment
 from belief_revision.extensions import resolve_extension_factories
 from belief_revision.extensions.torrey import DEFAULT_OUTPUT_DIR
@@ -85,7 +86,7 @@ def evaluator_configuration(
     if mode not in {"enabled", "disabled"}:
         raise ValueError("evaluator mode must be 'enabled' or 'disabled'")
     provider = evaluator.get("provider", EVALUATOR_PROVIDER)
-    if provider not in {"openai", "anthropic", "google", "deepseek"}:
+    if provider not in API_PROVIDERS:
         raise ValueError("evaluator provider must be an API provider, not NDIF")
     model = evaluator.get("model", EVALUATOR_MODEL)
     if not isinstance(model, str) or not model:
