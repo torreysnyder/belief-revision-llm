@@ -88,12 +88,21 @@ The full configuration runs many conversations and submits live NDIF requests.
 Review the configured models, replicate count, and worker count before starting
 it.
 
-The experiment writes:
+Each run writes to its own folder, so earlier runs are never overwritten:
 
-- `belief_revision_results_full_crossed.csv`
-- `dialogues_full_crossed.jsonl`
+- `runs/<run-name>/results.csv`
+- `runs/<run-name>/dialogues.jsonl`
 
-These generated files are ignored by Git.
+The run name defaults to the UTC start time plus the target model (for example
+`20261023-153012_llama-3.1-8b-instruct`, with `_single` appended for
+`--single-run`). Choose your own with `--run-name pilot-llama8b`. The run
+refuses to start if that folder already exists. `--csv-output` and
+`--jsonl-output` override the individual paths (and a run writing to an
+explicit path replaces any file already there).
+
+These generated files are ignored by Git. `analysis_full_crossed.py` still reads
+`belief_revision_results_full_crossed.csv` from the repository root, so to analyze
+a run, copy its `results.csv` there or call `main(input_csv=...)` with its path.
 
 ### Optional Supabase reporting
 

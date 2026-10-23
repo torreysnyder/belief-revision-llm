@@ -33,3 +33,4 @@ output_full_crossed/
 belief_revision_results_minimal_llama1b*.csv
 dialogues_minimal_llama1b*.jsonl
 activation_steering_pipeline/activations/live_captures/
+runs/
