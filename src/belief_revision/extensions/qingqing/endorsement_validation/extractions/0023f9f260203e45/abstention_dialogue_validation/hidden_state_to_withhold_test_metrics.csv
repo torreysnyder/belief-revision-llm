@@ -1,0 +1,3 @@
+template_id,mapping,status,selected_layer,selected_C,validation_balanced_accuracy,accuracy,balanced_accuracy,n_rows,positive_rate,ROC_AUC
+endorse,A_endorse,fit,20,0.01,1.0,0.90625,0.8333333333333333,32,0.71875,0.9516908212560387
+endorse,B_endorse,fit,27,0.01,0.9347826086956521,0.6875,0.8214285714285714,32,0.875,0.9732142857142857

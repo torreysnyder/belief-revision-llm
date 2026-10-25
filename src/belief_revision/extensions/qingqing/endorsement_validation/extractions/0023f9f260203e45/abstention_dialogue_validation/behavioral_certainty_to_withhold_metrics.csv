@@ -1,0 +1,3 @@
+template_id,mapping,status,certainty_coefficient_standardized,accuracy,balanced_accuracy,n_rows,positive_rate,ROC_AUC
+endorse,A_endorse,fit,-2.9043389103260817,0.8125,0.8019323671497585,32,0.71875,0.9251207729468599
+endorse,B_endorse,fit,-2.876958982191286,0.875,0.7142857142857143,32,0.875,0.9419642857142858

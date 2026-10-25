@@ -1,0 +1,3 @@
+train_condition,target_condition,template_id,mapping,method,layer,alpha,validation_MAE,validation_R2,validation_Pearson_r,MAE,R2,Pearson_r,n_rows,zero_change_MAE,training_mean_MAE,beats_zero_change,beats_training_mean
+DIALOGUE,AB,endorse,A_endorse,DIALOGUE_native_ridge,16.0,1000.0,0.4375866499419014,0.2041395663149983,0.5043841247559384,0.5544497836381197,0.10245136270417199,0.3961099824142202,24,0.59375,0.59375,True,True
+DIALOGUE,AB,endorse,B_endorse,DIALOGUE_native_ridge,17.0,10000.0,0.48219110591647524,0.3586905244742603,0.6057791501248396,0.7885963853138188,0.08675381254226056,0.4301691391089902,24,0.9583333333333334,0.9583333333333334,True,True

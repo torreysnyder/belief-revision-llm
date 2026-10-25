@@ -1,0 +1,9 @@
+claim_id,style_id,trust_in_institutions,conversation_goal,belief_anchor_level
+health_01,reflective_informal,mixed,reassurance,low
+health_01,reflective_informal,mixed,reassurance,medium
+politics_05,terse_anxious,low,explanation,high
+politics_05,terse_anxious,low,explanation,low
+politics_05,terse_anxious,low,explanation,medium
+politics_05,terse_anxious,low,reassurance,high
+politics_05,terse_anxious,low,reassurance,low
+politics_05,terse_anxious,low,reassurance,medium

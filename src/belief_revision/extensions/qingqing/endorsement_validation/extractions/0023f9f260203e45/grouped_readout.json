@@ -1,0 +1,19 @@
+{
+  "readout": "bare_or_space_v1",
+  "temperature": 1.0,
+  "primary_behavioral_measure": "E",
+  "primary_probe_target": "delta_E",
+  "secondary_behavioral_measure": "p_endorse_given_AB",
+  "label_groups": {
+    "A": [
+      32,
+      362
+    ],
+    "B": [
+      33,
+      425
+    ]
+  },
+  "source": "saved FP16 final normalized activations",
+  "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
+}

@@ -1,0 +1,7 @@
+template_id,mapping,method,layer,alpha,MAE,R2,Pearson_r,n_rows
+endorse,A_endorse,ridge_selected_on_validation,28.0,10.0,0.10661742452066392,0.9920815411153,0.9964910182125009,32
+endorse,A_endorse,training_mean,,,1.2314453125,-0.026310404303212742,,32
+endorse,A_endorse,length_and_condition_baseline,,100.0,1.392069602181531,-0.25076048574690124,-0.7571985127195595,32
+endorse,B_endorse,ridge_selected_on_validation,25.0,10.0,0.4853137210011482,0.8504626723269085,0.9597816954770422,32
+endorse,B_endorse,training_mean,,,1.3393554612994194,-0.09991296768205471,,32
+endorse,B_endorse,length_and_condition_baseline,,10000.0,1.3409778985689633,-0.1014262976565985,0.47938031506101525,32

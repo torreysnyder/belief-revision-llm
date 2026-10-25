@@ -1,0 +1,5 @@
+template_id,mapping,method,layer,alpha,MAE,R2,Pearson_r,n_rows
+endorse,A_endorse,AB_ridge_deltaE_transformed_to_deltaP,28.0,10.0,4.8808317844049146e-05,0.9853618363402847,0.9933117424066912,32
+endorse,A_endorse,zero_change_deltaP,,,0.0007802902480023022,-0.7980616391195008,,32
+endorse,B_endorse,AB_ridge_deltaE_transformed_to_deltaP,25.0,10.0,0.006395180059282079,0.9825570542797365,0.9920932020155799,32
+endorse,B_endorse,zero_change_deltaP,,,0.05013617360259559,-0.32911402276285484,,32

@@ -1,0 +1,25 @@
+claim_id,conversation_id,transition,split,delta_E_A_endorse,delta_E_B_endorse,delta_E_CB,abs_mapping_disagreement,predicted_delta_E_CB,residual,selected_layer,selected_alpha
+health_05,health_05__reflective_informal__mixed__validation__low__rep_1,core_challenge_1 → core_challenge_2,test,1.125,1.625,1.375,0.5,-0.04683937,1.4218393713235855,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_1,core_challenge_2 → closing,test,-0.25,-0.125,-0.1875,0.125,0.66275704,-0.8502570390701294,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_1,intro → core_challenge_1,test,-0.5,-0.625,-0.5625,0.125,-0.6300865,0.06758648157119751,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_10,core_challenge_1 → core_challenge_2,test,0.0,-0.25,-0.125,0.25,-0.49719763,0.37219762802124023,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_10,core_challenge_2 → closing,test,-0.625,-0.5,-0.5625,0.125,-0.37565285,-0.18684715032577515,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_10,intro → core_challenge_1,test,0.25,1.125,0.6875,0.875,0.4231096,0.26439040899276733,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_5,core_challenge_1 → core_challenge_2,test,0.5,0.125,0.3125,0.375,0.1045637,0.20793630182743073,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_5,core_challenge_2 → closing,test,-1.0,-0.5,-0.75,0.5,-0.65818816,-0.09181183576583862,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_5,intro → core_challenge_1,test,-0.375,0.375,0.0,0.75,-0.013420366,0.013420365750789642,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_6,core_challenge_1 → core_challenge_2,test,0.25,0.875,0.5625,0.625,1.1532643,-0.5907642841339111,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_6,core_challenge_2 → closing,test,-1.25,-0.875,-1.0625,0.375,-0.87172526,-0.19077473878860474,16,1000.0
+health_05,health_05__reflective_informal__mixed__validation__low__rep_6,intro → core_challenge_1,test,0.75,0.125,0.4375,0.625,-0.25024346,0.6877434551715851,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_10,core_challenge_1 → core_challenge_2,test,0.375,0.0,0.1875,0.375,-0.18760571,0.37510570883750916,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_10,core_challenge_2 → closing,test,0.0,-0.5,-0.25,0.5,-0.34712335,0.09712335467338562,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_10,intro → core_challenge_1,test,-0.375,1.125,0.375,1.5,0.18838878,0.18661122024059296,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_2,core_challenge_1 → core_challenge_2,test,-0.125,-1.375,-0.75,1.25,-0.21412714,-0.5358728617429733,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_2,core_challenge_2 → closing,test,-0.125,-0.25,-0.1875,0.125,-0.541446,0.3539459705352783,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_2,intro → core_challenge_1,test,1.75,5.375,3.5625,3.625,0.061270118,3.5012298822402954,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_5,core_challenge_1 → core_challenge_2,test,1.375,3.625,2.5,2.25,0.50409377,1.9959062337875366,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_5,core_challenge_2 → closing,test,-0.625,-1.375,-1.0,0.75,-0.7010871,-0.2989128828048706,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_5,intro → core_challenge_1,test,-1.375,0.125,-0.625,1.5,0.21552598,-0.8405259847640991,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_7,core_challenge_1 → core_challenge_2,test,0.5,1.25,0.875,0.75,-0.3784324,1.2534323930740356,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_7,core_challenge_2 → closing,test,-0.625,-0.625,-0.625,0.0,-0.12232912,-0.5026708766818047,16,1000.0
+politics_03,politics_03__skeptical_rambling__low__reassurance__low__rep_7,intro → core_challenge_1,test,0.125,0.25,0.1875,0.125,0.58513594,-0.39763593673706055,16,1000.0

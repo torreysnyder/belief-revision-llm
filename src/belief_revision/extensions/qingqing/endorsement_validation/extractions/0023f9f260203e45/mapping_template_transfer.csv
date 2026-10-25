@@ -1,0 +1,3 @@
+train_template,train_mapping,test_template,test_mapping,layer,MAE,R2,Pearson_r,n_rows
+endorse,A_endorse,endorse,B_endorse,28,2.6617386935977265,-2.567427420301485,0.48923639569899124,32
+endorse,B_endorse,endorse,A_endorse,25,1.8233164213597775,-1.3164732996664217,0.6032462402252582,32

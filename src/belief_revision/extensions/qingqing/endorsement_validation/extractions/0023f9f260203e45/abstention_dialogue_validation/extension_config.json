@@ -1,0 +1,38 @@
+{
+  "condition_names": [
+    "AB",
+    "ABC",
+    "DIALOGUE"
+  ],
+  "abc_mappings": [
+    "A_endorse",
+    "B_endorse"
+  ],
+  "label_groups_abc": {
+    "A": [
+      32,
+      362
+    ],
+    "B": [
+      33,
+      425
+    ],
+    "C": [
+      34,
+      356
+    ]
+  },
+  "dialogue_extraction_token": "<|im_end|>",
+  "dialogue_extraction_token_id": 151645,
+  "model_id": "Qwen/Qwen2.5-7B-Instruct",
+  "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "checkpoints": [
+    "intro",
+    "core_challenge_1",
+    "core_challenge_2",
+    "closing"
+  ],
+  "templates": [
+    "endorse"
+  ]
+}

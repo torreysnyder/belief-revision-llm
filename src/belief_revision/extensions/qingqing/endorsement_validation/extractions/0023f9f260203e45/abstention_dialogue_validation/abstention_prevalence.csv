@@ -1,0 +1,7 @@
+split,template_id,mapping,n_rows,withhold_rate,n_withhold
+test,endorse,A_endorse,32,0.71875,23
+test,endorse,B_endorse,32,0.875,28
+train,endorse,A_endorse,96,0.78125,75
+train,endorse,B_endorse,96,0.8125,78
+validation,endorse,A_endorse,32,0.5625,18
+validation,endorse,B_endorse,32,0.71875,23

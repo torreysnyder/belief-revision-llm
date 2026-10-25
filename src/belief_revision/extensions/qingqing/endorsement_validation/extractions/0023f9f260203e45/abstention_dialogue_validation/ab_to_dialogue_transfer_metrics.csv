@@ -1,0 +1,7 @@
+train_condition,test_condition,template_id,mapping,layer,alpha,target,method,MAE,R2,Pearson_r,n_rows
+AB,DIALOGUE,endorse,A_endorse,28,10.0,adjacent_delta_E,frozen_AB_direction,0.683239547846218,-0.31164723255865034,-0.06389599706131545,24
+AB,DIALOGUE,endorse,A_endorse,28,10.0,adjacent_delta_E,zero_change,0.59375,-0.00018857250612858145,,24
+AB,DIALOGUE,endorse,A_endorse,28,10.0,adjacent_delta_P,frozen_AB_direction,0.00028597339648210135,-4.798402667305602,-0.44788082804835844,24
+AB,DIALOGUE,endorse,B_endorse,25,10.0,adjacent_delta_E,frozen_AB_direction,0.9221191339505216,0.04122635134048702,0.3235214020374894,24
+AB,DIALOGUE,endorse,B_endorse,25,10.0,adjacent_delta_E,zero_change,0.9583333333333334,-0.06413301662707838,,24
+AB,DIALOGUE,endorse,B_endorse,25,10.0,adjacent_delta_P,frozen_AB_direction,0.055272741818650196,0.00209538747913518,0.10666794168385436,24
