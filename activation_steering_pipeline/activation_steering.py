@@ -73,20 +73,19 @@ Usage:
 
 import os
 import sys
+import copy
 import json
+import torch
 import random
 import hashlib
 import argparse
-import copy
 import platform
-import concurrent.futures
-from collections import Counter, OrderedDict, defaultdict
-from datetime import datetime, timezone
-from types import SimpleNamespace
-
-import torch
 import transformers
+import concurrent.futures
+from collections import OrderedDict, defaultdict
+from datetime import datetime, timezone
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+from types import SimpleNamespace
 
 DEFAULT_VECTOR_DIR = "vectors"
 DEFAULT_DIAGNOSTICS = "results/vector_diagnostics.csv"
@@ -111,9 +110,7 @@ MAX_NEW_TOKENS = 220
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 
-JUDGE_OUTCOMES = ["belief_target", "belief_offtarget", "belief_core", "belief_aux_mean",
-                  "belief_aux_target", "belief_aux_nontarget", "epistemic_confidence",
-                  "challenges_user", "changed_node_target"]
+JUDGE_OUTCOMES = ["belief_target", "belief_offtarget", "belief_core", "belief_aux_mean", "belief_aux_target", "belief_aux_nontarget", "epistemic_confidence", "challenges_user", "changed_node_target"]
 QUALITY_OUTCOMES = ["n_tokens", "empty_response", "repetition_3gram", "nll_unsteered"]
 
 
@@ -156,7 +153,7 @@ def fmt_alpha(a):
 
 def repetition_3gram(text):
     words = text.lower().split()
-    grams = [tuple(words[i:i + 3]) for i in range(len(words) - 2)]
+    grams = [tuple(words[i : i + 3]) for i in range(len(words) - 2)]
     return 0.0 if not grams else 1.0 - len(set(grams)) / len(grams)
 
 
@@ -171,7 +168,7 @@ def load_vectors(vector_dir, control_type, seed):
         p = torch.load(os.path.join(vector_dir, f"{family}_caa_vectors.pt"), map_location="cpu", weights_only=False)
         if control_type not in p["vectors"]:
             sys.exit(f"ERROR: {family} vectors have no '{control_type}' control type.")
-        raw[family] = p["vectors"][control_type].float()                  # [L, H]
+        raw[family] = p["vectors"][control_type].float()  # [L, H]
         residual[family] = p["residual_norm_mean"][control_type].float()  # [L]
     # Norm-matched random control: one fixed Gaussian direction per layer, scaled
     # to the mean of the Core and Auxiliary vector norms at that layer.
@@ -196,6 +193,7 @@ def auto_layers(diagnostics_path, control_type, n_layers, k):
     Core and Auxiliary vectors) within the middle half of the network. Uses only
     validation-split representational diagnostics, never steering outcomes."""
     import csv
+
     if not os.path.exists(diagnostics_path):
         sys.exit(f"ERROR: {diagnostics_path} not found; run build_caa_vectors.py or pass --layers.")
     scores = defaultdict(list)
@@ -204,10 +202,9 @@ def auto_layers(diagnostics_path, control_type, n_layers, k):
             if row["control_type"] == control_type:
                 scores[int(row["layer"])].append(float(row["val_proj_d"]))
     lo, hi = n_layers // 4, (3 * n_layers) // 4
-    ranked = sorted((sum(v) / len(v), l) for l, v in scores.items() if lo <= l < hi)
-    chosen = sorted(l for _, l in ranked[-k:])
-    rule = (f"top {k} layer(s) in [{lo}, {hi}) by mean val_proj_d of the core and auxiliary "
-            f"'{control_type}' vectors in {diagnostics_path}")
+    ranked = sorted((sum(values) / len(values), layer) for layer, values in scores.items() if lo <= layer < hi)
+    chosen = sorted(layer for _, layer in ranked[-k:])
+    rule = f"top {k} layer(s) in [{lo}, {hi}) by mean val_proj_d of the core and auxiliary '{control_type}' vectors in {diagnostics_path}"
     return chosen, rule
 
 
@@ -263,8 +260,8 @@ class Steerer:
     steers exactly the final prompt token and all generated tokens."""
 
     def __init__(self, layer_modules, layers):
-        self.vectors = {l: None for l in layers}
-        self.handles = [layer_modules[l].register_forward_hook(self._hook(l)) for l in layers]
+        self.vectors = {layer: None for layer in layers}
+        self.handles = [layer_modules[layer].register_forward_hook(self._hook(layer)) for layer in layers]
 
     def _hook(self, layer):
         def fn(module, inputs, output):
@@ -280,13 +277,14 @@ class Steerer:
             if isinstance(output, list):
                 return [hs] + output[1:]
             return hs
+
         return fn
 
     def set(self, vectors, device, dtype):
-        self.vectors = {l: v.to(device=device, dtype=dtype) for l, v in vectors.items()}
+        self.vectors = {layer: vector.to(device=device, dtype=dtype) for layer, vector in vectors.items()}
 
     def clear(self):
-        self.vectors = {l: None for l in self.vectors}
+        self.vectors = {layer: None for layer in self.vectors}
 
     def remove(self):
         for h in self.handles:
@@ -312,8 +310,7 @@ def prefix_cache(model, prompt_ids, device):
     at batch size 1 avoids the quadratic prefill memory of batched long prompts."""
     cache = DynamicCache()
     with torch.inference_mode():
-        model(input_ids=torch.tensor([prompt_ids[:-1]], dtype=torch.long, device=device),
-              past_key_values=cache, use_cache=True, logits_to_keep=1)
+        model(input_ids=torch.tensor([prompt_ids[:-1]], dtype=torch.long, device=device), past_key_values=cache, use_cache=True, logits_to_keep=1)
     return cache
 
 
@@ -332,23 +329,21 @@ def response_nll(model, cache, prompt_ids, responses, pad_id, device):
     ids = [[prompt_ids[-1]] + r + [pad_id] * (width - len(r)) for r in responses]
     with torch.inference_mode():
         # right padding only follows real tokens, so causal attention leaves them unaffected
-        logits = model(input_ids=torch.tensor(ids, dtype=torch.long, device=device),
-                       past_key_values=expanded(cache, len(ids)), use_cache=True).logits
+        logits = model(input_ids=torch.tensor(ids, dtype=torch.long, device=device), past_key_values=expanded(cache, len(ids)), use_cache=True).logits
         out = []
         for b, r in enumerate(responses):
             if not r:
                 out.append(None)
                 continue
             target = torch.tensor(r, dtype=torch.long, device=device)
-            out.append(torch.nn.functional.cross_entropy(logits[b, :len(r)].float(), target).item())
+            out.append(torch.nn.functional.cross_entropy(logits[b, : len(r)].float(), target).item())
     return out
 
 
 def run_generation(args, items, conds, raw, residual, gens_path, done_keys, model_name, model_revision):
     print(f"Loading {model_name} @ {model_revision} ({args.dtype}) on {args.device} ...")
     tok = AutoTokenizer.from_pretrained(model_name, revision=model_revision)
-    model = AutoModelForCausalLM.from_pretrained(model_name, revision=model_revision,
-                                                 dtype=DTYPES[args.dtype]).to(args.device)
+    model = AutoModelForCausalLM.from_pretrained(model_name, revision=model_revision, dtype=DTYPES[args.dtype]).to(args.device)
     model.eval()
     decoder = model.get_decoder() if hasattr(model, "get_decoder") else model.model
     steer_layers = sorted({c["layer"] for c in conds if c["layer"] is not None})
@@ -357,8 +352,7 @@ def run_generation(args, items, conds, raw, residual, gens_path, done_keys, mode
     eos_ids = set(eos_ids if isinstance(eos_ids, list) else [eos_ids])
     pad_id = tok.eos_token_id
 
-    jobs = [(context, p, branch, s) for context in CONTEXTS for p in items[context]
-            for branch in args.branches for s in range(args.n_samples)]
+    jobs = [(context, p, branch, s) for context in CONTEXTS for p in items[context] for branch in args.branches for s in range(args.n_samples)]
     print(f"Generation: {len(jobs)} prompts x {len(conds)} conditions")
     n_new = 0
     for j, (context, p, branch, sample) in enumerate(jobs, 1):
@@ -369,60 +363,65 @@ def run_generation(args, items, conds, raw, residual, gens_path, done_keys, mode
         prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         stored = p.get(f"{branch}_prompt_rendered")
         if stored is not None and stored != prompt:
-            sys.exit(f"ERROR: rendered {branch} prompt for {p['pair_id']} differs from the stored one "
-                     f"(chat template drift).")
+            sys.exit(f"ERROR: rendered {branch} prompt for {p['pair_id']} differs from the stored one (chat template drift).")
         prompt_ids = tok(prompt)["input_ids"]
         cache = prefix_cache(model, prompt_ids, args.device)
         seed = stable_seed(args.seed, p["pair_id"], branch, sample)
         records = []
         for start in range(0, len(todo), args.max_batch):
-            chunk = todo[start:start + args.max_batch]
-            vectors = {l: torch.zeros((len(chunk), raw["core"].shape[1])) for l in steer_layers}
+            chunk = todo[start : start + args.max_batch]
+            vectors = {layer: torch.zeros((len(chunk), raw["core"].shape[1])) for layer in steer_layers}
             for b, c in enumerate(chunk):
                 if c["layer"] is not None:
-                    vectors[c["layer"]][b] = steering_vector(raw, residual, c["vector"], c["layer"],
-                                                             c["alpha"], args.alpha_units)
+                    vectors[c["layer"]][b] = steering_vector(raw, residual, c["vector"], c["layer"], c["alpha"], args.alpha_units)
             ids = torch.tensor([prompt_ids] * len(chunk), dtype=torch.long, device=args.device)
             torch.manual_seed(seed)
             steerer.set(vectors, args.device, DTYPES[args.dtype])
             try:
                 with torch.inference_mode():
-                    out = model.generate(input_ids=ids, attention_mask=torch.ones_like(ids),
-                                         past_key_values=expanded(cache, len(chunk)),
-                                         max_new_tokens=args.max_new_tokens,
-                                         do_sample=not args.greedy,
-                                         temperature=None if args.greedy else TEMPERATURE,
-                                         top_p=None if args.greedy else TOP_P,
-                                         pad_token_id=pad_id)
+                    out = model.generate(
+                        input_ids=ids,
+                        attention_mask=torch.ones_like(ids),
+                        past_key_values=expanded(cache, len(chunk)),
+                        max_new_tokens=args.max_new_tokens,
+                        do_sample=not args.greedy,
+                        temperature=None if args.greedy else TEMPERATURE,
+                        top_p=None if args.greedy else TOP_P,
+                        pad_token_id=pad_id,
+                    )
             finally:
                 steerer.clear()
             responses = []
-            for row in out[:, len(prompt_ids):].tolist():
+            for row in out[:, len(prompt_ids) :].tolist():
                 cut = next((i for i, t in enumerate(row) if t in eos_ids), len(row))
                 responses.append(row[:cut])
             nlls = response_nll(model, cache, prompt_ids, responses, pad_id, args.device)
             for c, resp, nll in zip(chunk, responses, nlls):
                 text = tok.decode(resp, skip_special_tokens=True).strip()
-                records.append(OrderedDict([
-                    ("key", gen_key(p["pair_id"], branch, sample, c)),
-                    ("pair_id", p["pair_id"]),
-                    ("source_state_id", p["source_state_id"]),
-                    ("conversation_id", p["conversation_id"]),
-                    ("context", context),
-                    ("branch", branch),
-                    ("sample", sample),
-                    ("layer", c["layer"]),
-                    ("vector", c["vector"]),
-                    ("alpha", c["alpha"]),
-                    ("seed", seed),
-                    ("prompt_tokens", len(prompt_ids)),
-                    ("response", text),
-                    ("n_tokens", len(resp)),
-                    ("hit_max_tokens", len(resp) >= args.max_new_tokens),
-                    ("empty_response", int(not text)),
-                    ("repetition_3gram", repetition_3gram(text)),
-                    ("nll_unsteered", nll),
-                ]))
+                records.append(
+                    OrderedDict(
+                        [
+                            ("key", gen_key(p["pair_id"], branch, sample, c)),
+                            ("pair_id", p["pair_id"]),
+                            ("source_state_id", p["source_state_id"]),
+                            ("conversation_id", p["conversation_id"]),
+                            ("context", context),
+                            ("branch", branch),
+                            ("sample", sample),
+                            ("layer", c["layer"]),
+                            ("vector", c["vector"]),
+                            ("alpha", c["alpha"]),
+                            ("seed", seed),
+                            ("prompt_tokens", len(prompt_ids)),
+                            ("response", text),
+                            ("n_tokens", len(resp)),
+                            ("hit_max_tokens", len(resp) >= args.max_new_tokens),
+                            ("empty_response", int(not text)),
+                            ("repetition_3gram", repetition_3gram(text)),
+                            ("nll_unsteered", nll),
+                        ]
+                    )
+                )
         append_jsonl(gens_path, records)
         done_keys.update(r["key"] for r in records)
         n_new += len(records)
@@ -463,8 +462,7 @@ def run_judge(args, gens, pairs_by_id, histories, judg_path, judged_keys):
     try:
         import belief_revision_experiment_qwen as bre
     except ImportError as e:
-        sys.exit(f"ERROR: cannot import the judge from belief_revision_experiment_qwen.py ({e}). "
-                 f"Run the judge stage in the environment used for the behavioral experiment.")
+        sys.exit(f"ERROR: cannot import the judge from belief_revision_experiment_qwen.py ({e}). Run the judge stage in the environment used for the behavioral experiment.")
     bre.set_call_budget(args.judge_budget)
     todo = [g for g in gens if g["key"] not in judged_keys]
     print(f"Judge ({bre.JUDGE_MODEL}): {len(todo)} generations to score, call budget {args.judge_budget}")
@@ -473,12 +471,10 @@ def run_judge(args, gens, pairs_by_id, histories, judg_path, judged_keys):
 
     def score(g):
         p = pairs_by_id[g["pair_id"]]
-        vignette = SimpleNamespace(core_claim=p["core_claim"], auxiliaries=[
-            SimpleNamespace(text=p["display_A1_text"]), SimpleNamespace(text=p["display_A2_text"])])
+        vignette = SimpleNamespace(core_claim=p["core_claim"], auxiliaries=[SimpleNamespace(text=p["display_A1_text"]), SimpleNamespace(text=p["display_A2_text"])])
         history = probe_history(p, g["branch"], g["response"], histories, args.probe_history)
         probe = bre.run_probe(vignette, history, p["phase"], previous_probe=p.get("probe_pre"))
-        return OrderedDict([("key", g["key"]), ("judge_model", bre.JUDGE_MODEL),
-                            ("probe_history", args.probe_history), ("probe", probe)])
+        return OrderedDict([("key", g["key"]), ("judge_model", bre.JUDGE_MODEL), ("probe_history", args.probe_history), ("probe", probe)])
 
     n_done, n_failed, stopped = 0, 0, None
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.judge_workers) as pool:
@@ -523,18 +519,13 @@ def outcomes(g, probe, pair):
         return o
     core, a1, a2 = (number(probe.get(k)) for k in ("belief_core", "belief_A1", "belief_A2"))
     aux_mean = (a1 + a2) / 2 if a1 is not None and a2 is not None else None
-    o.update(belief_core=core, belief_aux_mean=aux_mean,
-             epistemic_confidence=number(probe.get("assistant_epistemic_confidence")),
-             challenges_user=float(probe.get("assistant_stance") == "challenges_user"))
+    o.update(belief_core=core, belief_aux_mean=aux_mean, epistemic_confidence=number(probe.get("assistant_epistemic_confidence")), challenges_user=float(probe.get("assistant_stance") == "challenges_user"))
     if g["context"] == "core":
-        o.update(belief_target=core, belief_offtarget=aux_mean,
-                 changed_node_target=float(probe.get("changed_node") == "C"))
+        o.update(belief_target=core, belief_offtarget=aux_mean, changed_node_target=float(probe.get("changed_node") == "C"))
     else:
         target = pair["target_belief"]
         other = "A2" if target == "A1" else "A1"
-        o.update(belief_aux_target=number(probe.get(f"belief_{target}")),
-                 belief_aux_nontarget=number(probe.get(f"belief_{other}")),
-                 changed_node_target=float(probe.get("changed_node") == target))
+        o.update(belief_aux_target=number(probe.get(f"belief_{target}")), belief_aux_nontarget=number(probe.get(f"belief_{other}")), changed_node_target=float(probe.get("changed_node") == target))
         o.update(belief_target=o["belief_aux_target"], belief_offtarget=core)
     if core is None:  # probe parse failure: drop every judge outcome
         for k in JUDGE_OUTCOMES:
@@ -563,6 +554,7 @@ def cluster_bootstrap(rows, n_boot, gen):
 
 def summarize(args, run_dir, tag, gens, judgments, pairs_by_id, layers, families, alphas):
     import csv
+
     probes = {j["key"]: j["probe"] for j in judgments}
     gen = torch.Generator().manual_seed(args.seed)
     keys = JUDGE_OUTCOMES + QUALITY_OUTCOMES
@@ -584,19 +576,30 @@ def summarize(args, run_dir, tag, gens, judgments, pairs_by_id, layers, families
             continue
         for k in keys:
             if o.get(k) is not None and base.get(k) is not None:
-                cells[(g["layer"], g["vector"], g["context"], g["branch"], g["alpha"], k)].append(
-                    (g["conversation_id"], o[k] - base[k], base[k]))
+                cells[(g["layer"], g["vector"], g["context"], g["branch"], g["alpha"], k)].append((g["conversation_id"], o[k] - base[k], base[k]))
 
     by_alpha = []
     for (layer, vector, context, branch, alpha, k), vals in sorted(cells.items()):
         est, lo, hi = cluster_bootstrap([(c, d, 1.0) for c, d, _ in vals], args.n_bootstrap, gen)
-        by_alpha.append(OrderedDict([
-            ("layer", layer), ("vector", vector), ("context", context), ("branch", branch),
-            ("alpha", alpha), ("alpha_units", args.alpha_units), ("outcome", k), ("n", len(vals)),
-            ("n_conversations", len({c for c, _, _ in vals})),
-            ("baseline_mean", sum(b for _, _, b in vals) / len(vals)),
-            ("delta_mean", est), ("delta_ci_low", lo), ("delta_ci_high", hi),
-        ]))
+        by_alpha.append(
+            OrderedDict(
+                [
+                    ("layer", layer),
+                    ("vector", vector),
+                    ("context", context),
+                    ("branch", branch),
+                    ("alpha", alpha),
+                    ("alpha_units", args.alpha_units),
+                    ("outcome", k),
+                    ("n", len(vals)),
+                    ("n_conversations", len({c for c, _, _ in vals})),
+                    ("baseline_mean", sum(b for _, _, b in vals) / len(vals)),
+                    ("delta_mean", est),
+                    ("delta_ci_low", lo),
+                    ("delta_ci_high", hi),
+                ]
+            )
+        )
 
     # dose-response: least-squares slope of delta on alpha through the origin
     # (delta is 0 at alpha = 0 by construction), pooled over all alphas and per sign
@@ -606,12 +609,9 @@ def summarize(args, run_dir, tag, gens, judgments, pairs_by_id, layers, families
             dose_cells[(layer, vector, context, branch, k)].append((c, alpha, d))
     dose = []
     for (layer, vector, context, branch, k), vals in sorted(dose_cells.items()):
-        row = OrderedDict([("layer", layer), ("vector", vector), ("context", context), ("branch", branch),
-                           ("outcome", k), ("alpha_units", args.alpha_units), ("n", len(vals)),
-                           ("n_conversations", len({c for c, _, _ in vals}))])
+        row = OrderedDict([("layer", layer), ("vector", vector), ("context", context), ("branch", branch), ("outcome", k), ("alpha_units", args.alpha_units), ("n", len(vals)), ("n_conversations", len({c for c, _, _ in vals}))])
         for name, sel in (("slope", lambda a: True), ("slope_pos", lambda a: a > 0), ("slope_neg", lambda a: a < 0)):
-            est, lo, hi = cluster_bootstrap([(c, a * d, a * a) for c, a, d in vals if sel(a)],
-                                            args.n_bootstrap, gen)
+            est, lo, hi = cluster_bootstrap([(c, a * d, a * a) for c, a, d in vals if sel(a)], args.n_bootstrap, gen)
             row[name], row[f"{name}_ci_low"], row[f"{name}_ci_high"] = est, lo, hi
         dose.append(row)
 
@@ -632,12 +632,8 @@ def summarize(args, run_dir, tag, gens, judgments, pairs_by_id, layers, families
         for branch in args.branches:
             for vector in families:
                 for context in CONTEXTS:
-                    row = OrderedDict([("layer", layer), ("branch", branch), ("vector", vector),
-                                       ("context", context),
-                                       ("test", f"{vector} -> {context}"),
-                                       ("alpha_units", args.alpha_units)])
-                    for k in ("belief_target", "belief_offtarget", "belief_core", "belief_aux_mean",
-                              "nll_unsteered"):
+                    row = OrderedDict([("layer", layer), ("branch", branch), ("vector", vector), ("context", context), ("test", f"{vector} -> {context}"), ("alpha_units", args.alpha_units)])
+                    for k in ("belief_target", "belief_offtarget", "belief_core", "belief_aux_mean", "nll_unsteered"):
                         r = lookup.get((layer, vector, context, branch, k))
                         row[f"{k}_slope"] = r["slope"] if r else None
                         row[f"{k}_ci_low"] = r["slope_ci_low"] if r else None
@@ -662,8 +658,7 @@ def print_cross_task(cross, layers, branches, families):
         return f"{s:+.2f} {ci}".center(24)
 
     idx = {(r["layer"], r["branch"], r["vector"], r["context"]): r for r in cross}
-    for k, label in (("belief_target", "TARGET belief (core in core ctx, challenged aux in aux ctx)"),
-                     ("belief_offtarget", "OFF-TARGET belief (mean aux in core ctx, core in aux ctx)")):
+    for k, label in (("belief_target", "TARGET belief (core in core ctx, challenged aux in aux ctx)"), ("belief_offtarget", "OFF-TARGET belief (mean aux in core ctx, core in aux ctx)")):
         if all(r[f"{k}_slope"] is None for r in cross):
             continue
         print(f"\nDose-response slope of {label}, per unit alpha (negative = more revision):")
@@ -688,32 +683,29 @@ def main():
     ap.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR)
     ap.add_argument("--run-name", default=None, help="default: development | heldout")
     ap.add_argument("--split", default="validation", choices=sorted(SPLIT_TAGS))
-    ap.add_argument("--confirm-test", action="store_true",
-                    help="required for --split test (final held-out evaluation; do not tune on it)")
-    ap.add_argument("--stages", nargs="+", default=["generate", "judge", "summarize"],
-                    choices=["generate", "judge", "summarize"])
-    ap.add_argument("--vector-control", default="neutral", choices=["neutral", "supportive"],
-                    help="control type of the vectors and of the evaluated control branch")
+    ap.add_argument("--confirm-test", action="store_true", help="required for --split test (final held-out evaluation; do not tune on it)")
+    ap.add_argument("--stages", nargs="+", default=["generate", "judge", "summarize"], choices=["generate", "judge", "summarize"])
+    ap.add_argument("--vector-control", default="neutral", choices=["neutral", "supportive"], help="control type of the vectors and of the evaluated control branch")
     ap.add_argument("--vectors", nargs="+", default=VECTOR_FAMILIES, choices=VECTOR_FAMILIES)
     ap.add_argument("--contexts", nargs="+", default=CONTEXTS, choices=CONTEXTS)
     ap.add_argument("--branches", nargs="+", default=BRANCHES, choices=BRANCHES)
     ap.add_argument("--layers", nargs="+", default=["auto"], help="layer indices, or 'auto'")
     ap.add_argument("--n-auto-layers", type=int, default=1)
-    ap.add_argument("--alphas", type=float, nargs="+", default=None,
-                    help="nonzero steering coefficients (0 is always included as the baseline)")
+    ap.add_argument("--alphas", type=float, nargs="+", default=None, help="nonzero steering coefficients (0 is always included as the baseline)")
     ap.add_argument("--alpha-units", default="raw", choices=["raw", "residual"])
     ap.add_argument("--max-states", type=int, default=None, help="evaluate at most N source states per context")
     ap.add_argument("--n-samples", type=int, default=1, help="generations per prompt and condition")
     ap.add_argument("--greedy", action="store_true", help="greedy decoding instead of the behavioral sampling")
     ap.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     ap.add_argument("--max-batch", type=int, default=16, help="conditions generated together per prompt")
-    ap.add_argument("--dtype", default="bfloat16" if torch.cuda.is_available() else "float32",
-                    choices=sorted(DTYPES), help="behavioral run used bfloat16 on CUDA")
+    ap.add_argument("--dtype", default="bfloat16" if torch.cuda.is_available() else "float32", choices=sorted(DTYPES), help="behavioral run used bfloat16 on CUDA")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--probe-history", default="text_only", choices=["text_only", "full"],
-                    help="text_only hides the pilot's evidence metadata (evidence_id, role, ...) from the "
-                         "judge; full reproduces the behavioral probe input exactly but would label the "
-                         "control branch's turn with the original evidence metadata")
+    ap.add_argument(
+        "--probe-history",
+        default="text_only",
+        choices=["text_only", "full"],
+        help="text_only hides the pilot's evidence metadata (evidence_id, role, ...) from the judge; full reproduces the behavioral probe input exactly but would label the control branch's turn with the original evidence metadata",
+    )
     ap.add_argument("--judge-budget", type=int, default=3000, help="max judge API calls this invocation")
     ap.add_argument("--judge-workers", type=int, default=6)
     ap.add_argument("--n-bootstrap", type=int, default=2000)
@@ -721,8 +713,7 @@ def main():
     args = ap.parse_args()
 
     if args.split == "test" and not args.confirm_test:
-        sys.exit("ERROR: --split test is the preregistered held-out evaluation. Fix layers and alphas "
-                 "on the validation split first, then rerun with --confirm-test.")
+        sys.exit("ERROR: --split test is the preregistered held-out evaluation. Fix layers and alphas on the validation split first, then rerun with --confirm-test.")
     alphas = args.alphas if args.alphas is not None else DEFAULT_ALPHAS[args.alpha_units]
     alphas = sorted({float(a) for a in alphas if a != 0})
     if not alphas:
@@ -733,8 +724,8 @@ def main():
     if args.layers == ["auto"]:
         layers, layer_rule = auto_layers(args.diagnostics, args.vector_control, n_layers, args.n_auto_layers)
     else:
-        layers, layer_rule = sorted({int(l) for l in args.layers}), "specified on the command line"
-    if any(not 0 <= l < n_layers for l in layers):
+        layers, layer_rule = sorted({int(layer) for layer in args.layers}), "specified on the command line"
+    if any(not 0 <= layer < n_layers for layer in layers):
         sys.exit(f"ERROR: layers must be in [0, {n_layers}).")
     print(f"Layers {layers} ({layer_rule}); alphas {alphas} ({args.alpha_units}); vectors {args.vectors}")
 
@@ -746,72 +737,84 @@ def main():
     config_path = os.path.join(run_dir, "run_config.json")
 
     # Everything that changes what a generation key means must match on resume.
-    config = OrderedDict([
-        ("format_version", FORMAT_VERSION),
-        ("split", args.split),
-        ("vector_control", args.vector_control),
-        ("vector_files_sha256", metadata["output_files"]),
-        ("model_name", metadata["model_name"]),
-        ("model_revision", metadata["model_revision"]),
-        ("activation_location", metadata["activation_location"]),
-        ("alpha_units", args.alpha_units),
-        ("steer_positions", "final_prompt_token_and_generated"),
-        ("random_vector", f"Gaussian direction per layer (seed {args.seed}), norm = mean of core and "
-                          f"auxiliary vector norms at that layer"),
-        ("decoding", "greedy" if args.greedy else f"sample temperature={TEMPERATURE} top_p={TOP_P}"),
-        ("max_new_tokens", args.max_new_tokens),
-        ("dtype", args.dtype),
-        ("probe_history", args.probe_history),
-        ("seed", args.seed),
-    ])
+    config = OrderedDict(
+        [
+            ("format_version", FORMAT_VERSION),
+            ("split", args.split),
+            ("vector_control", args.vector_control),
+            ("vector_files_sha256", metadata["output_files"]),
+            ("model_name", metadata["model_name"]),
+            ("model_revision", metadata["model_revision"]),
+            ("activation_location", metadata["activation_location"]),
+            ("alpha_units", args.alpha_units),
+            ("steer_positions", "final_prompt_token_and_generated"),
+            ("random_vector", f"Gaussian direction per layer (seed {args.seed}), norm = mean of core and auxiliary vector norms at that layer"),
+            ("decoding", "greedy" if args.greedy else f"sample temperature={TEMPERATURE} top_p={TOP_P}"),
+            ("max_new_tokens", args.max_new_tokens),
+            ("dtype", args.dtype),
+            ("probe_history", args.probe_history),
+            ("seed", args.seed),
+        ]
+    )
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             previous = json.load(f)
         diff = [k for k in config if previous.get("fixed", {}).get(k) != config[k]]
         if diff:
-            sys.exit(f"ERROR: {run_dir} was created with different settings ({diff}). "
-                     f"Use another --run-name.")
+            sys.exit(f"ERROR: {run_dir} was created with different settings ({diff}). Use another --run-name.")
 
-    pair_paths = {c: p for c, p in (("core", args.core_pairs), ("auxiliary", args.auxiliary_pairs))
-                  if c in args.contexts}
-    items = load_items(pair_paths, args.split_manifest, args.split, args.vector_control,
-                       args.max_states, args.seed)
+    pair_paths = {c: p for c, p in (("core", args.core_pairs), ("auxiliary", args.auxiliary_pairs)) if c in args.contexts}
+    items = load_items(pair_paths, args.split_manifest, args.split, args.vector_control, args.max_states, args.seed)
     for c in CONTEXTS:
         items.setdefault(c, [])
-        print(f"{c} context: {len(items[c])} {args.split} source states "
-              f"({len({p['conversation_id'] for p in items[c]})} conversations)")
+        print(f"{c} context: {len(items[c])} {args.split} source states ({len({p['conversation_id'] for p in items[c]})} conversations)")
     pairs_by_id = {p["pair_id"]: p for c in CONTEXTS for p in items[c]}
     conds = condition_list(layers, args.vectors, alphas)
 
     with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(OrderedDict([
-            ("fixed", config),
-            ("last_invocation", OrderedDict([
-                ("timestamp", datetime.now(timezone.utc).isoformat()),
-                ("script", os.path.basename(__file__)),
-                ("script_sha256", sha256_file(__file__)),
-                ("argv", sys.argv[1:]),
-                ("layers", layers), ("layer_rule", layer_rule), ("alphas", alphas),
-                ("vectors", args.vectors), ("contexts", args.contexts), ("branches", args.branches),
-                ("n_samples", args.n_samples), ("max_states", args.max_states),
-                ("n_states", {c: len(items[c]) for c in CONTEXTS}),
-                ("pair_ids", {c: [p["pair_id"] for p in items[c]] for c in CONTEXTS}),
-                ("vector_metadata", os.path.join(args.vector_dir, "vector_metadata.json")),
-                ("split_manifest_sha256", sha256_file(args.split_manifest)),
-                ("torch_version", torch.__version__),
-                ("transformers_version", transformers.__version__),
-                ("python_version", platform.python_version()),
-            ])),
-        ]), f, indent=2, ensure_ascii=False)
+        json.dump(
+            OrderedDict(
+                [
+                    ("fixed", config),
+                    (
+                        "last_invocation",
+                        OrderedDict(
+                            [
+                                ("timestamp", datetime.now(timezone.utc).isoformat()),
+                                ("script", os.path.basename(__file__)),
+                                ("script_sha256", sha256_file(__file__)),
+                                ("argv", sys.argv[1:]),
+                                ("layers", layers),
+                                ("layer_rule", layer_rule),
+                                ("alphas", alphas),
+                                ("vectors", args.vectors),
+                                ("contexts", args.contexts),
+                                ("branches", args.branches),
+                                ("n_samples", args.n_samples),
+                                ("max_states", args.max_states),
+                                ("n_states", {c: len(items[c]) for c in CONTEXTS}),
+                                ("pair_ids", {c: [p["pair_id"] for p in items[c]] for c in CONTEXTS}),
+                                ("vector_metadata", os.path.join(args.vector_dir, "vector_metadata.json")),
+                                ("split_manifest_sha256", sha256_file(args.split_manifest)),
+                                ("torch_version", torch.__version__),
+                                ("transformers_version", transformers.__version__),
+                                ("python_version", platform.python_version()),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
 
     if "generate" in args.stages:
         done = {g["key"] for g in read_jsonl(gens_path)}
-        run_generation(args, items, conds, raw, residual, gens_path, done,
-                       metadata["model_name"], metadata["model_revision"])
+        run_generation(args, items, conds, raw, residual, gens_path, done, metadata["model_name"], metadata["model_revision"])
 
     # restrict every later stage to the current design
-    wanted = {gen_key(p["pair_id"], b, s, c) for p in pairs_by_id.values() for b in args.branches
-              for s in range(args.n_samples) for c in conds}
+    wanted = {gen_key(p["pair_id"], b, s, c) for p in pairs_by_id.values() for b in args.branches for s in range(args.n_samples) for c in conds}
     gens = [g for g in read_jsonl(gens_path) if g["key"] in wanted]
     missing = len(wanted) - len(gens)
     if missing:

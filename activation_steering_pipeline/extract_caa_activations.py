@@ -72,17 +72,11 @@ FALLBACK_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
 FORMAT_VERSION = 1
 
-ACTIVATION_LOCATION = (
-    "decoder_block_output: residual stream after transformer block l "
-    "(attention + MLP residual additions), captured by a forward hook on "
-    "decoder.layers[l]; equals HF hidden_states[l+1] for l < n_layers-1 and is "
-    "pre-final-RMSNorm for the last block"
-)
+ACTIVATION_LOCATION = "decoder_block_output: residual stream after transformer block l (attention + MLP residual additions), captured by a forward hook on decoder.layers[l]; equals HF hidden_states[l+1] for l < n_layers-1 and is pre-final-RMSNorm for the last block"
 
 SPLITS = ["train", "validation", "test"]
 DEFAULT_FRACTIONS = (0.70, 0.15, 0.15)
-DEFAULT_STRATIFICATION = ["style_id", "belief_anchor_level", "conversation_goal",
-                          "trust_in_institutions", "aux_order_condition"]
+DEFAULT_STRATIFICATION = ["style_id", "belief_anchor_level", "conversation_goal", "trust_in_institutions", "aux_order_condition"]
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 
@@ -206,9 +200,7 @@ def load_or_create_split(path, all_pairs, seed, fractions, strat_vars, input_has
         mapping = manifest["assignments"]
         missing = [c for c in convs if c not in mapping]
         if missing:
-            sys.exit(f"ERROR: {len(missing)} conversation(s) are not in the frozen split {path} "
-                     f"(e.g. {missing[0]}). The split is never extended silently; create a new "
-                     f"split manifest deliberately if the pair data changed.")
+            sys.exit(f"ERROR: {len(missing)} conversation(s) are not in the frozen split {path} (e.g. {missing[0]}). The split is never extended silently; create a new split manifest deliberately if the pair data changed.")
         bad = sorted({s for s in mapping.values() if s not in SPLITS})
         if bad:
             sys.exit(f"ERROR: unknown split label(s) {bad} in {path}.")
@@ -218,8 +210,7 @@ def load_or_create_split(path, all_pairs, seed, fractions, strat_vars, input_has
     mapping = create_split(convs, seed, fractions, strat_vars)
     manifest = {
         "split_seed": seed,
-        "split_method": "conversation-level systematic allocation over a stratification-sorted list "
-                        "(within-stratum order randomised with split_seed)",
+        "split_method": "conversation-level systematic allocation over a stratification-sorted list (within-stratum order randomised with split_seed)",
         "split_unit": "conversation_id",
         "train_fraction": fractions[0],
         "validation_fraction": fractions[1],
@@ -247,10 +238,10 @@ def resolve_revision(name, revision):
         return revision
     try:
         from huggingface_hub import HfApi
+
         return HfApi().model_info(name, revision=revision or "main").sha
     except Exception as e:
-        print(f"NOTE: could not resolve '{name}' revision online ({type(e).__name__}); "
-              f"using the locally cached snapshot and recording its commit hash.")
+        print(f"NOTE: could not resolve '{name}' revision online ({type(e).__name__}); using the locally cached snapshot and recording its commit hash.")
         return revision
 
 
@@ -315,11 +306,8 @@ def prepare_pair(tok, pair, position_name):
     parent = render(tok, exp_msgs[:-1], generation_prompt=False)
     checks["parent_prefix_match"] = exp_text.startswith(parent) and ctrl_text.startswith(parent)
     exp_nogen, ctrl_nogen = render(tok, exp_msgs, False), render(tok, ctrl_msgs, False)
-    gen_tail = exp_text[len(exp_nogen):]
-    checks["ends_with_generation_prompt"] = (
-        exp_text.startswith(exp_nogen) and ctrl_text.startswith(ctrl_nogen)
-        and len(gen_tail) > 0 and ctrl_text[len(ctrl_nogen):] == gen_tail
-    )
+    gen_tail = exp_text[len(exp_nogen) :]
+    checks["ends_with_generation_prompt"] = exp_text.startswith(exp_nogen) and ctrl_text.startswith(ctrl_nogen) and len(gen_tail) > 0 and ctrl_text[len(ctrl_nogen) :] == gen_tail
 
     exp_ids, ctrl_ids = tokenize(tok, exp_text), tokenize(tok, ctrl_text)
     shared = 0
@@ -366,6 +354,7 @@ class BlockOutputCapture:
             for b, idx in enumerate(self.positions):
                 rows.append(hs[b, idx, :].float().mean(dim=0))
             self.captured[i] = torch.stack(rows).cpu()
+
         return fn
 
     def collect(self):
@@ -383,14 +372,14 @@ def run_batches(model, decoder, capture, prompts, pad_id, device, batch_size):
     out = {}
     with torch.inference_mode():
         for start in range(0, len(keys), batch_size):
-            batch = keys[start:start + batch_size]
+            batch = keys[start : start + batch_size]
             max_len = max(len(prompts[k]["ids"]) for k in batch)
             ids = torch.full((len(batch), max_len), pad_id, dtype=torch.long)
             mask = torch.zeros((len(batch), max_len), dtype=torch.long)
             for b, k in enumerate(batch):
                 seq = prompts[k]["ids"]
-                ids[b, :len(seq)] = torch.tensor(seq, dtype=torch.long)
-                mask[b, :len(seq)] = 1
+                ids[b, : len(seq)] = torch.tensor(seq, dtype=torch.long)
+                mask[b, : len(seq)] = 1
             capture.positions = [prompts[k]["positions"] for k in batch]
             decoder(input_ids=ids.to(device), attention_mask=mask.to(device), use_cache=False)
             acts = capture.collect()
@@ -433,19 +422,41 @@ def self_check(model, decoder, capture, prompt, device):
 # ---------------------------------------------------------------------------
 PAIR_FIELDS = [
     # identity and provenance
-    "pair_id", "source_state_id", "conversation_id", "cell_id", "replicate_index",
+    "pair_id",
+    "source_state_id",
+    "conversation_id",
+    "cell_id",
+    "replicate_index",
     # contrast definition
-    "contrast_type", "control_type", "phase", "turn_in_phase", "global_turn_index",
+    "contrast_type",
+    "control_type",
+    "phase",
+    "turn_in_phase",
+    "global_turn_index",
     # evidence and belief target
-    "evidence_id", "evidence_role", "evidence_strength", "evidence_credibility",
-    "target_belief", "target_belief_canonical",
+    "evidence_id",
+    "evidence_role",
+    "evidence_strength",
+    "evidence_credibility",
+    "target_belief",
+    "target_belief_canonical",
     # experimental factors
-    "style_id", "initial_affect", "affect", "trust_in_institutions", "conversation_goal",
-    "belief_anchor_level", "aux_order_condition",
+    "style_id",
+    "initial_affect",
+    "affect",
+    "trust_in_institutions",
+    "conversation_goal",
+    "belief_anchor_level",
+    "aux_order_condition",
     # quality control
-    "qc_pass", "qc_hard_flags", "qc_soft_flags",
+    "qc_pass",
+    "qc_hard_flags",
+    "qc_soft_flags",
     # extra fields useful for sensitivity analyses
-    "original_references_evidence", "length_ratio", "aux_gate_passed", "control_evidence_id",
+    "original_references_evidence",
+    "length_ratio",
+    "aux_gate_passed",
+    "control_evidence_id",
 ]
 
 
@@ -486,22 +497,17 @@ def main():
     ap.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     ap.add_argument("--model", default=None, help="defaults to target_model in the pair manifest")
     ap.add_argument("--model-revision", default=None, help="commit hash to pin; default resolves 'main' once and records it")
-    ap.add_argument("--dtype", default="float32", choices=sorted(DTYPES),
-                    help="forward-pass dtype (behavioral run used bfloat16 on CUDA)")
+    ap.add_argument("--dtype", default="float32", choices=sorted(DTYPES), help="forward-pass dtype (behavioral run used bfloat16 on CUDA)")
     ap.add_argument("--save-dtype", default="float32", choices=sorted(DTYPES))
     ap.add_argument("--attn-implementation", default=None, help="e.g. eager or sdpa; default = library default")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--batch-size", type=int, default=1,
-                    help="prompts per forward pass (right-padded); 1 avoids any padding-dependent numerics")
+    ap.add_argument("--batch-size", type=int, default=1, help="prompts per forward pass (right-padded); 1 avoids any padding-dependent numerics")
     ap.add_argument("--token-position", default="final_prompt_token", choices=sorted(TOKEN_POSITIONS))
-    ap.add_argument("--include-qc-failed", action="store_true",
-                    help="also extract hard-QC-failed pairs (kept with their qc fields)")
-    ap.add_argument("--allow-prompt-mismatch", action="store_true",
-                    help="extract pairs whose prompt verification failed instead of aborting")
+    ap.add_argument("--include-qc-failed", action="store_true", help="also extract hard-QC-failed pairs (kept with their qc fields)")
+    ap.add_argument("--allow-prompt-mismatch", action="store_true", help="extract pairs whose prompt verification failed instead of aborting")
     ap.add_argument("--limit", type=int, default=None, help="first N eligible pairs per dataset (smoke test)")
     ap.add_argument("--split-seed", type=int, default=20261006)
-    ap.add_argument("--split-fractions", type=float, nargs=3, default=DEFAULT_FRACTIONS,
-                    metavar=("TRAIN", "VALIDATION", "TEST"))
+    ap.add_argument("--split-fractions", type=float, nargs=3, default=DEFAULT_FRACTIONS, metavar=("TRAIN", "VALIDATION", "TEST"))
     ap.add_argument("--stratify", nargs="*", default=DEFAULT_STRATIFICATION)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--overwrite", action="store_true", help="replace existing activation files")
@@ -517,8 +523,7 @@ def main():
     manifest_path = os.path.join(args.out_dir, "activation_manifest.json")
     existing = [p for p in list(out_paths.values()) + [manifest_path] if os.path.exists(p)]
     if existing and not args.overwrite:
-        sys.exit(f"ERROR: {existing[0]} already exists. Activation artifacts are frozen; "
-                 f"pass --overwrite or use a different --out-dir.")
+        sys.exit(f"ERROR: {existing[0]} already exists. Activation artifacts are frozen; pass --overwrite or use a different --out-dir.")
 
     set_determinism(args.seed)
 
@@ -535,20 +540,16 @@ def main():
     all_pairs = pairs_by_type["core"] + pairs_by_type["auxiliary"]
 
     # The split covers every conversation in the pair data, independent of QC.
-    split_map, split_manifest, split_created = load_or_create_split(
-        args.split_manifest, all_pairs, args.split_seed, tuple(args.split_fractions),
-        args.stratify, input_hashes)
+    split_map, split_manifest, split_created = load_or_create_split(args.split_manifest, all_pairs, args.split_seed, tuple(args.split_fractions), args.stratify, input_hashes)
 
     model_name = args.model or default_model_name(args.pair_manifest)
     print(f"Loading {model_name} ({args.dtype}) on {args.device} ...")
-    model, tok, model_revision = load_model_and_tokenizer(
-        model_name, args.model_revision, args.dtype, args.device, args.attn_implementation)
+    model, tok, model_revision = load_model_and_tokenizer(model_name, args.model_revision, args.dtype, args.device, args.attn_implementation)
     decoder, layers = decoder_layers(model)
     n_layers, hidden_dim = len(layers), model.config.hidden_size
     chat_template = tok.chat_template or ""
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-    print(f"Model revision {model_revision} | {n_layers} layers x {hidden_dim} | "
-          f"chat template sha256 {sha256_text(chat_template)[:12]}")
+    print(f"Model revision {model_revision} | {n_layers} layers x {hidden_dim} | chat template sha256 {sha256_text(chat_template)[:12]}")
 
     # select + verify pairs
     selected, counts = {}, {}
@@ -556,7 +557,7 @@ def main():
         eligible = [p for p in ps if args.include_qc_failed or p.get("qc_pass") is True]
         n_qc_excluded = len(ps) - len(eligible)
         if args.limit:
-            eligible = eligible[:args.limit]
+            eligible = eligible[: args.limit]
         prepared, mismatched = [], []
         for p in eligible:
             prep = prepare_pair(tok, p, args.token_position)
@@ -567,16 +568,12 @@ def main():
                     continue
             prepared.append((p, prep))
         if mismatched:
-            print(f"WARNING: {len(mismatched)} {t} pair(s) failed prompt verification, e.g. "
-                  f"{mismatched[0][0]}: {mismatched[0][1]}")
+            print(f"WARNING: {len(mismatched)} {t} pair(s) failed prompt verification, e.g. {mismatched[0][0]}: {mismatched[0][1]}")
             if not args.allow_prompt_mismatch:
-                sys.exit("ERROR: prompt verification failed (template / tokenizer drift or malformed "
-                         "pairs). Inspect them, or pass --allow-prompt-mismatch to extract anyway.")
+                sys.exit("ERROR: prompt verification failed (template / tokenizer drift or malformed pairs). Inspect them, or pass --allow-prompt-mismatch to extract anyway.")
         selected[t] = prepared
-        counts[t] = {"seen": len(ps), "qc_excluded": n_qc_excluded,
-                     "prompt_mismatch": len(mismatched), "extracted": len(prepared)}
-        print(f"{t}: {len(ps)} pairs seen, {n_qc_excluded} excluded by hard QC, "
-              f"{len(prepared)} to extract")
+        counts[t] = {"seen": len(ps), "qc_excluded": n_qc_excluded, "prompt_mismatch": len(mismatched), "extracted": len(prepared)}
+        print(f"{t}: {len(ps)} pairs seen, {n_qc_excluded} excluded by hard QC, {len(prepared)} to extract")
 
     # forward passes; identical prompts (the experimental branch is shared by the
     # neutral and supportive pairs of a source state) are run once
@@ -595,31 +592,32 @@ def main():
         check = self_check(model, decoder, capture, next(iter(unique.values())), args.device)
         print(f"Hook self-check: {check}")
         if not check["passed"]:
-            sys.exit("ERROR: hooked block outputs do not match hidden_states; activation_location "
-                     "would be mislabelled. Check the transformers version / model architecture.")
+            sys.exit("ERROR: hooked block outputs do not match hidden_states; activation_location would be mislabelled. Check the transformers version / model architecture.")
     acts = run_batches(model, decoder, capture, unique, pad_id, args.device, args.batch_size)
     capture.remove()
 
     timestamp = datetime.now(timezone.utc).isoformat()
     script_sha = sha256_file(__file__)
-    invariant = OrderedDict([
-        ("format_version", FORMAT_VERSION),
-        ("model_name", model_name),
-        ("model_revision", model_revision),
-        ("tokenizer_name", model_name),
-        ("tokenizer_revision", model_revision),
-        ("activation_location", ACTIVATION_LOCATION),
-        ("token_position", args.token_position),
-        ("layers_extracted", list(range(n_layers))),
-        ("n_layers", n_layers),
-        ("hidden_dim", hidden_dim),
-        ("forward_dtype", args.dtype),
-        ("activation_dtype", args.save_dtype),
-        ("chat_template_hash", sha256_text(chat_template)),
-        ("extraction_script", os.path.basename(__file__)),
-        ("extraction_script_version", script_sha),
-        ("extraction_timestamp", timestamp),
-    ])
+    invariant = OrderedDict(
+        [
+            ("format_version", FORMAT_VERSION),
+            ("model_name", model_name),
+            ("model_revision", model_revision),
+            ("tokenizer_name", model_name),
+            ("tokenizer_revision", model_revision),
+            ("activation_location", ACTIVATION_LOCATION),
+            ("token_position", args.token_position),
+            ("layers_extracted", list(range(n_layers))),
+            ("n_layers", n_layers),
+            ("hidden_dim", hidden_dim),
+            ("forward_dtype", args.dtype),
+            ("activation_dtype", args.save_dtype),
+            ("chat_template_hash", sha256_text(chat_template)),
+            ("extraction_script", os.path.basename(__file__)),
+            ("extraction_script_version", script_sha),
+            ("extraction_timestamp", timestamp),
+        ]
+    )
 
     save_dtype = DTYPES[args.save_dtype]
     split_counts = {}
@@ -652,47 +650,46 @@ def main():
         }
         torch.save(payload, out_paths[t])
         output_hashes[os.path.basename(out_paths[t])] = sha256_file(out_paths[t])
-        split_counts[t] = {
-            f"{s}/{ct}": n for (s, ct), n in sorted(Counter((m["split"], m["control_type"]) for m in metas).items())
-        }
+        split_counts[t] = {f"{s}/{ct}": n for (s, ct), n in sorted(Counter((m["split"], m["control_type"]) for m in metas).items())}
         print(f"Saved {len(metas)} {t} pairs -> {out_paths[t]} (tensors {tuple(exp_t.shape)})")
 
     manifest = OrderedDict(invariant)
-    manifest.update([
-        ("core_input_file", args.core_pairs),
-        ("core_input_sha256", input_hashes[os.path.basename(args.core_pairs)]),
-        ("auxiliary_input_file", args.auxiliary_pairs),
-        ("auxiliary_input_sha256", input_hashes[os.path.basename(args.auxiliary_pairs)]),
-        ("pair_manifest_file", args.pair_manifest if os.path.exists(args.pair_manifest) else None),
-        ("pair_manifest_sha256", sha256_file(args.pair_manifest) if os.path.exists(args.pair_manifest) else None),
-        ("split_manifest_file", args.split_manifest),
-        ("split_manifest_sha256", sha256_file(args.split_manifest)),
-        ("split_created_this_run", split_created),
-        ("n_core_pairs_seen", counts["core"]["seen"]),
-        ("n_core_pairs_extracted", counts["core"]["extracted"]),
-        ("n_auxiliary_pairs_seen", counts["auxiliary"]["seen"]),
-        ("n_auxiliary_pairs_extracted", counts["auxiliary"]["extracted"]),
-        ("n_qc_excluded", counts["core"]["qc_excluded"] + counts["auxiliary"]["qc_excluded"]),
-        ("n_prompt_mismatch", counts["core"]["prompt_mismatch"] + counts["auxiliary"]["prompt_mismatch"]),
-        ("include_qc_failed", args.include_qc_failed),
-        ("limit", args.limit),
-        ("prompt_match_verified", all(prep["prompt_match_verified"]
-                                      for prepared in selected.values() for _, prep in prepared)),
-        ("n_unique_prompts_forwarded", len(unique)),
-        ("counts_by_split_and_control", split_counts),
-        ("hook_self_check", check),
-        ("device", args.device),
-        ("batch_size", args.batch_size),
-        ("padding_side", "right"),
-        ("attn_implementation", getattr(model.config, "_attn_implementation", None)),
-        ("deterministic_algorithms", torch.are_deterministic_algorithms_enabled()),
-        ("seed", args.seed),
-        ("torch_version", torch.__version__),
-        ("transformers_version", transformers.__version__),
-        ("python_version", platform.python_version()),
-        ("cuda_device", torch.cuda.get_device_name(0) if args.device.startswith("cuda") else None),
-        ("output_files", output_hashes),
-    ])
+    manifest.update(
+        [
+            ("core_input_file", args.core_pairs),
+            ("core_input_sha256", input_hashes[os.path.basename(args.core_pairs)]),
+            ("auxiliary_input_file", args.auxiliary_pairs),
+            ("auxiliary_input_sha256", input_hashes[os.path.basename(args.auxiliary_pairs)]),
+            ("pair_manifest_file", args.pair_manifest if os.path.exists(args.pair_manifest) else None),
+            ("pair_manifest_sha256", sha256_file(args.pair_manifest) if os.path.exists(args.pair_manifest) else None),
+            ("split_manifest_file", args.split_manifest),
+            ("split_manifest_sha256", sha256_file(args.split_manifest)),
+            ("split_created_this_run", split_created),
+            ("n_core_pairs_seen", counts["core"]["seen"]),
+            ("n_core_pairs_extracted", counts["core"]["extracted"]),
+            ("n_auxiliary_pairs_seen", counts["auxiliary"]["seen"]),
+            ("n_auxiliary_pairs_extracted", counts["auxiliary"]["extracted"]),
+            ("n_qc_excluded", counts["core"]["qc_excluded"] + counts["auxiliary"]["qc_excluded"]),
+            ("n_prompt_mismatch", counts["core"]["prompt_mismatch"] + counts["auxiliary"]["prompt_mismatch"]),
+            ("include_qc_failed", args.include_qc_failed),
+            ("limit", args.limit),
+            ("prompt_match_verified", all(prep["prompt_match_verified"] for prepared in selected.values() for _, prep in prepared)),
+            ("n_unique_prompts_forwarded", len(unique)),
+            ("counts_by_split_and_control", split_counts),
+            ("hook_self_check", check),
+            ("device", args.device),
+            ("batch_size", args.batch_size),
+            ("padding_side", "right"),
+            ("attn_implementation", getattr(model.config, "_attn_implementation", None)),
+            ("deterministic_algorithms", torch.are_deterministic_algorithms_enabled()),
+            ("seed", args.seed),
+            ("torch_version", torch.__version__),
+            ("transformers_version", transformers.__version__),
+            ("python_version", platform.python_version()),
+            ("cuda_device", torch.cuda.get_device_name(0) if args.device.startswith("cuda") else None),
+            ("output_files", output_hashes),
+        ]
+    )
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     print(f"Manifest -> {manifest_path}")

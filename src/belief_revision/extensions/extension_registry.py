@@ -1,11 +1,13 @@
 """Named extension factories available to the experiment command line."""
 
+from ..demo import JasonsExperiment
 from .extensions import ExtensionFactory
 from .torrey.torrey_caa_extension import TorreyCAAExtension
 from collections.abc import Iterable, Mapping
 from functools import partial
 
 EXTENSION_REGISTRY: dict[str, ExtensionFactory] = {
+    "jasons-exp": JasonsExperiment,
     "torrey-caa": TorreyCAAExtension,
 }
 

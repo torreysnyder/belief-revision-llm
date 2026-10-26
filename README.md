@@ -41,11 +41,26 @@ are tracked in [`diff.md`](diff.md).
 
 ## Setup
 
-Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) are required. Install
-and pin Python 3.12, then create the project environment from the lockfile:
+Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) 0.13.5 or newer are
+required. This minimum includes the fix for uv's
+[CA/TLS certificate advisory](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62),
+and `pyproject.toml` enforces the same minimum for both uv and `uv_build`.
+Upgrade an existing `uv` installation first:
+
+```bash
+# Installations created by uv's standalone installer
+uv self update
+
+# Homebrew installations
+brew upgrade uv
+```
+
+Then install or update the managed Python 3.12 interpreter and create the
+project environment from the lockfile:
 
 ```bash
 uv python install 3.12
+uv python upgrade 3.12
 uv python pin 3.12
 uv sync
 ```
@@ -62,8 +77,11 @@ cp sample.env .env
 For the legacy experiment, set `OPENAI_API_KEY`. For the migrated experiment,
 set `NDIF_API_KEY` and a Hugging Face read token in `HF_TOKEN`; the Hugging Face
 token is needed to retrieve gated model configuration and tokenizer files.
-Accept the applicable model license on Hugging Face before testing a gated
-model. The resulting `.env` file is ignored by Git and must not be committed.
+The default behavioral evaluator is `openai/gpt-4.1-mini` through OpenRouter,
+so set `OPENROUTER_API_KEY` unless evaluation is disabled or another provider
+is selected in YAML. Accept the applicable model license on Hugging Face before
+testing a gated model. The resulting `.env` file is ignored by Git and must not
+be committed.
 
 ## Run the experiment
 
@@ -166,6 +184,23 @@ artifact. Extension hooks execute in the order supplied on the command line.
 Torrey's defaults capture the configured turns and layers into
 `activation_steering_pipeline/activations/live_captures/`; that generated
 directory is ignored by Git.
+
+A fully commented walkthrough of the extension interface is registered as
+`jasons-exp` and implemented in
+[`src/belief_revision/demo/jasons_exp.py`](src/belief_revision/demo/jasons_exp.py).
+It demonstrates every conversation lifecycle hook, selective or all-layer
+activation capture, researcher-owned artifacts, optional artifact reporting,
+and read-only Supabase access. Run it with:
+
+```bash
+uv run python scripts/run_experiment.py \
+  --single-run \
+  --extension jasons-exp \
+  --config configs/default.yaml
+```
+
+Add `--reporting true` to exercise the Supabase reporting path after the
+required Supabase values are configured in `.env`.
 
 ## Run the analysis
 

@@ -1,7 +1,7 @@
 evaluator:
   mode: enabled
-  provider: deepseek
-  model: deepseek-chat
+  provider: openrouter
+  model: openai/gpt-4.1-mini
   max_tokens: 4096
 
 extensions:

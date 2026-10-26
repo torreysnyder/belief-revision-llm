@@ -58,16 +58,15 @@ Usage:
 """
 
 import os
-import sys
 import csv
+import sys
 import json
+import torch
 import hashlib
 import argparse
 import platform
 from collections import Counter, OrderedDict
 from datetime import datetime, timezone
-
-import torch
 
 DEFAULT_ACT_DIR = "activations"
 DEFAULT_SPLIT_MANIFEST = "data/caa_split_manifest.json"
@@ -83,12 +82,9 @@ CONSTRUCTION_SPLIT = "train"
 DIAGNOSTIC_SPLIT = "validation"
 
 # Provenance fields that must agree between the Core and Auxiliary activation files.
-INVARIANT_FIELDS = ["model_name", "model_revision", "tokenizer_revision", "activation_location",
-                    "token_position", "n_layers", "hidden_dim", "chat_template_hash",
-                    "extraction_script_version", "split_manifest_sha256"]
+INVARIANT_FIELDS = ["model_name", "model_revision", "tokenizer_revision", "activation_location", "token_position", "n_layers", "hidden_dim", "chat_template_hash", "extraction_script_version", "split_manifest_sha256"]
 
-NORMALIZATION = ("none: v[l] is the raw mean of the per-pair differences "
-                 "h_experimental - h_control at layer l; unit_vectors holds v[l] / ||v[l]||")
+NORMALIZATION = "none: v[l] is the raw mean of the per-pair differences h_experimental - h_control at layer l; unit_vectors holds v[l] / ||v[l]||"
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +144,7 @@ def load_activations(act_dir, split_manifest_path, allow_hash_mismatch):
         n = len(p["pair_metadata"])
         for key in ("experimental_activation", "control_activation", "pair_difference"):
             if tuple(p[key].shape) != (n, p["n_layers"], p["hidden_dim"]):
-                sys.exit(f"ERROR: {path}: {key} has shape {tuple(p[key].shape)}, expected "
-                         f"{(n, p['n_layers'], p['hidden_dim'])}.")
+                sys.exit(f"ERROR: {path}: {key} has shape {tuple(p[key].shape)}, expected {(n, p['n_layers'], p['hidden_dim'])}.")
         payloads[family] = p
         print(f"Loaded {path}: {n} pairs, {p['n_layers']} layers x {p['hidden_dim']}")
 
@@ -214,7 +209,7 @@ def weighted_means(weights, sums, counts, chunk=100):
     flat = sums.reshape(sums.shape[0], -1)
     out = []
     for s in range(0, weights.shape[0], chunk):
-        w = weights[s:s + chunk].double()
+        w = weights[s : s + chunk].double()
         out.append(((w @ flat) / (w @ counts)[:, None]).float())
     return torch.cat(out).reshape((weights.shape[0],) + tuple(sums.shape[1:]))
 
@@ -227,9 +222,9 @@ def bootstrap_stats(sums, counts, full, n_boot, gen):
     draws = torch.randint(0, c, (n_boot, c), generator=gen)
     weights = torch.zeros((n_boot, c), dtype=torch.float64)
     weights.scatter_add_(1, draws, torch.ones_like(draws, dtype=torch.float64))
-    boot = weighted_means(weights, sums, counts)        # [B, L, H]
-    cos = cosine(boot, full[None])                      # [B, L]
-    norms = boot.norm(dim=-1)                           # [B, L]
+    boot = weighted_means(weights, sums, counts)  # [B, L, H]
+    cos = cosine(boot, full[None])  # [B, L]
+    norms = boot.norm(dim=-1)  # [B, L]
     return {
         "bootstrap_cosine_mean": cos.mean(0),
         "bootstrap_cosine_p05": quantile(cos, 0.05),
@@ -245,10 +240,10 @@ def split_half_stats(sums, counts, n_halves, gen):
         return {"split_half_cosine_mean": nan, "split_half_cosine_p05": nan}
     masks = torch.zeros((n_halves, c), dtype=torch.float64)
     for r in range(n_halves):
-        masks[r, torch.randperm(c, generator=gen)[:c // 2]] = 1.0
+        masks[r, torch.randperm(c, generator=gen)[: c // 2]] = 1.0
     a = weighted_means(masks, sums, counts)
     b = weighted_means(1.0 - masks, sums, counts)
-    cos = cosine(a, b)                                  # [R, L]
+    cos = cosine(a, b)  # [R, L]
     return {"split_half_cosine_mean": cos.mean(0), "split_half_cosine_p05": quantile(cos, 0.05)}
 
 
@@ -257,7 +252,7 @@ def projection_stats(vector, diff):
     nan = torch.full((vector.shape[0],), float("nan"))
     if diff.shape[0] == 0:
         return {"n": 0, "accuracy": nan, "proj_mean": nan, "proj_sd": nan, "proj_d": nan}
-    proj = (diff * unit(vector)[None]).sum(dim=-1)      # [N, L]
+    proj = (diff * unit(vector)[None]).sum(dim=-1)  # [N, L]
     sd = proj.std(dim=0) if diff.shape[0] > 1 else nan
     return {
         "n": diff.shape[0],
@@ -277,14 +272,11 @@ def main():
     ap.add_argument("--split-manifest", default=DEFAULT_SPLIT_MANIFEST)
     ap.add_argument("--vector-dir", default=DEFAULT_VECTOR_DIR)
     ap.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR)
-    ap.add_argument("--exclude-soft-flags", nargs="*", default=[],
-                    help="drop train pairs carrying any of these qc_soft_flags ('all' = any soft flag); "
-                         "for sensitivity analyses, default keeps every hard-QC-passing pair")
+    ap.add_argument("--exclude-soft-flags", nargs="*", default=[], help="drop train pairs carrying any of these qc_soft_flags ('all' = any soft flag); for sensitivity analyses, default keeps every hard-QC-passing pair")
     ap.add_argument("--n-bootstrap", type=int, default=1000, help="conversation-level bootstrap resamples")
     ap.add_argument("--n-split-halves", type=int, default=200, help="random conversation-level split halves")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--allow-hash-mismatch", action="store_true",
-                    help="build even if activation files or the split manifest changed since extraction")
+    ap.add_argument("--allow-hash-mismatch", action="store_true", help="build even if activation files or the split manifest changed since extraction")
     ap.add_argument("--overwrite", action="store_true", help="replace existing vector / diagnostic files")
     args = ap.parse_args()
 
@@ -293,10 +285,8 @@ def main():
     diagnostics_path = os.path.join(args.results_dir, "vector_diagnostics.csv")
     existing = [p for p in list(out_paths.values()) + [metadata_path, diagnostics_path] if os.path.exists(p)]
     if existing and not args.overwrite:
-        sys.exit(f"ERROR: {existing[0]} already exists. Vector artifacts are frozen; "
-                 f"pass --overwrite or use a different --vector-dir / --results-dir.")
-    payloads, act_manifest, act_manifest_path, act_hashes, split_hash = load_activations(
-        args.activations_dir, args.split_manifest, args.allow_hash_mismatch)
+        sys.exit(f"ERROR: {existing[0]} already exists. Vector artifacts are frozen; pass --overwrite or use a different --vector-dir / --results-dir.")
+    payloads, act_manifest, act_manifest_path, act_hashes, split_hash = load_activations(args.activations_dir, args.split_manifest, args.allow_hash_mismatch)
     n_layers, hidden_dim = payloads["core"]["n_layers"], payloads["core"]["hidden_dim"]
     layers = payloads["core"].get("layers_extracted", list(range(n_layers)))
 
@@ -316,10 +306,8 @@ def main():
             val_idx, _ = select_rows(p, DIAGNOSTIC_SPLIT, ct)
             if not train_idx:
                 sys.exit(f"ERROR: no {CONSTRUCTION_SPLIT} pairs left for {family}/{ct}.")
-            data[(family, ct)] = {"train": subset(p, train_idx), "val": subset(p, val_idx),
-                                  "n_soft_excluded": n_soft}
-            print(f"{family}/{ct}: {len(train_idx)} {CONSTRUCTION_SPLIT} pairs "
-                  f"({n_soft} soft-flag excluded), {len(val_idx)} {DIAGNOSTIC_SPLIT} pairs")
+            data[(family, ct)] = {"train": subset(p, train_idx), "val": subset(p, val_idx), "n_soft_excluded": n_soft}
+            print(f"{family}/{ct}: {len(train_idx)} {CONSTRUCTION_SPLIT} pairs ({n_soft} soft-flag excluded), {len(val_idx)} {DIAGNOSTIC_SPLIT} pairs")
     for p in payloads.values():  # free the full tensors (including the test split)
         for key in ("experimental_activation", "control_activation", "pair_difference"):
             p.pop(key)
@@ -351,37 +339,41 @@ def main():
             neu_sup = cosine(vectors[(family, "neutral")], vectors[(family, "supportive")])
             norm = v.norm(dim=-1)
             for li, layer in enumerate(layers):
-                rows.append(OrderedDict([
-                    ("contrast_type", family),
-                    ("control_type", ct),
-                    ("layer", layer),
-                    ("n_train_pairs", tr["diff"].shape[0]),
-                    ("n_train_conversations", counts.shape[0]),
-                    ("vector_norm", norm[li].item()),
-                    ("residual_norm_mean", residual_norm[key][li].item()),
-                    ("relative_norm", (norm[li] / residual_norm[key][li]).item()),
-                    ("mean_pair_diff_norm", pair_norm[li].item()),
-                    # 1 when every pair difference points the same way, ~1/sqrt(n) for noise
-                    ("coherence", (norm[li] / pair_norm[li]).item()),
-                    ("train_paired_accuracy", train_proj["accuracy"][li].item()),
-                    ("bootstrap_cosine_mean", boot["bootstrap_cosine_mean"][li].item()),
-                    ("bootstrap_cosine_p05", boot["bootstrap_cosine_p05"][li].item()),
-                    ("bootstrap_norm_p025", boot["bootstrap_norm_p025"][li].item()),
-                    ("bootstrap_norm_p975", boot["bootstrap_norm_p975"][li].item()),
-                    ("split_half_cosine_mean", halves["split_half_cosine_mean"][li].item()),
-                    ("split_half_cosine_p05", halves["split_half_cosine_p05"][li].item()),
-                    ("core_aux_cosine", core_aux[li].item()),
-                    ("neutral_supportive_cosine", neu_sup[li].item()),
-                    ("n_val_pairs", val_proj["n"]),
-                    ("val_paired_accuracy", val_proj["accuracy"][li].item()),
-                    ("val_proj_mean", val_proj["proj_mean"][li].item()),
-                    ("val_proj_sd", val_proj["proj_sd"][li].item()),
-                    ("val_proj_d", val_proj["proj_d"][li].item()),
-                    ("cross_contrast", other),
-                    ("n_val_cross_pairs", cross_proj["n"]),
-                    ("val_cross_paired_accuracy", cross_proj["accuracy"][li].item()),
-                    ("val_cross_proj_d", cross_proj["proj_d"][li].item()),
-                ]))
+                rows.append(
+                    OrderedDict(
+                        [
+                            ("contrast_type", family),
+                            ("control_type", ct),
+                            ("layer", layer),
+                            ("n_train_pairs", tr["diff"].shape[0]),
+                            ("n_train_conversations", counts.shape[0]),
+                            ("vector_norm", norm[li].item()),
+                            ("residual_norm_mean", residual_norm[key][li].item()),
+                            ("relative_norm", (norm[li] / residual_norm[key][li]).item()),
+                            ("mean_pair_diff_norm", pair_norm[li].item()),
+                            # 1 when every pair difference points the same way, ~1/sqrt(n) for noise
+                            ("coherence", (norm[li] / pair_norm[li]).item()),
+                            ("train_paired_accuracy", train_proj["accuracy"][li].item()),
+                            ("bootstrap_cosine_mean", boot["bootstrap_cosine_mean"][li].item()),
+                            ("bootstrap_cosine_p05", boot["bootstrap_cosine_p05"][li].item()),
+                            ("bootstrap_norm_p025", boot["bootstrap_norm_p025"][li].item()),
+                            ("bootstrap_norm_p975", boot["bootstrap_norm_p975"][li].item()),
+                            ("split_half_cosine_mean", halves["split_half_cosine_mean"][li].item()),
+                            ("split_half_cosine_p05", halves["split_half_cosine_p05"][li].item()),
+                            ("core_aux_cosine", core_aux[li].item()),
+                            ("neutral_supportive_cosine", neu_sup[li].item()),
+                            ("n_val_pairs", val_proj["n"]),
+                            ("val_paired_accuracy", val_proj["accuracy"][li].item()),
+                            ("val_proj_mean", val_proj["proj_mean"][li].item()),
+                            ("val_proj_sd", val_proj["proj_sd"][li].item()),
+                            ("val_proj_d", val_proj["proj_d"][li].item()),
+                            ("cross_contrast", other),
+                            ("n_val_cross_pairs", cross_proj["n"]),
+                            ("val_cross_paired_accuracy", cross_proj["accuracy"][li].item()),
+                            ("val_cross_proj_d", cross_proj["proj_d"][li].item()),
+                        ]
+                    )
+                )
 
     with open(diagnostics_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
@@ -392,29 +384,31 @@ def main():
     # write vectors
     timestamp = datetime.now(timezone.utc).isoformat()
     script_sha = sha256_file(__file__)
-    provenance = OrderedDict([
-        ("format_version", FORMAT_VERSION),
-        ("build_script", os.path.basename(__file__)),
-        ("build_script_version", script_sha),
-        ("build_timestamp", timestamp),
-        ("model_name", payloads["core"]["model_name"]),
-        ("model_revision", payloads["core"]["model_revision"]),
-        ("tokenizer_revision", payloads["core"]["tokenizer_revision"]),
-        ("activation_location", payloads["core"]["activation_location"]),
-        ("token_position", payloads["core"]["token_position"]),
-        ("chat_template_hash", payloads["core"]["chat_template_hash"]),
-        ("n_layers", n_layers),
-        ("hidden_dim", hidden_dim),
-        ("layers", list(layers)),
-        ("construction_split", CONSTRUCTION_SPLIT),
-        ("qc_filter", "qc_pass == true"),
-        ("excluded_soft_flags", list(args.exclude_soft_flags)),
-        ("normalization", NORMALIZATION),
-        ("activation_manifest_sha256", sha256_file(act_manifest_path)),
-        ("activation_extraction_script_version", payloads["core"]["extraction_script_version"]),
-        ("split_manifest_file", args.split_manifest),
-        ("split_manifest_sha256", split_hash),
-    ])
+    provenance = OrderedDict(
+        [
+            ("format_version", FORMAT_VERSION),
+            ("build_script", os.path.basename(__file__)),
+            ("build_script_version", script_sha),
+            ("build_timestamp", timestamp),
+            ("model_name", payloads["core"]["model_name"]),
+            ("model_revision", payloads["core"]["model_revision"]),
+            ("tokenizer_revision", payloads["core"]["tokenizer_revision"]),
+            ("activation_location", payloads["core"]["activation_location"]),
+            ("token_position", payloads["core"]["token_position"]),
+            ("chat_template_hash", payloads["core"]["chat_template_hash"]),
+            ("n_layers", n_layers),
+            ("hidden_dim", hidden_dim),
+            ("layers", list(layers)),
+            ("construction_split", CONSTRUCTION_SPLIT),
+            ("qc_filter", "qc_pass == true"),
+            ("excluded_soft_flags", list(args.exclude_soft_flags)),
+            ("normalization", NORMALIZATION),
+            ("activation_manifest_sha256", sha256_file(act_manifest_path)),
+            ("activation_extraction_script_version", payloads["core"]["extraction_script_version"]),
+            ("split_manifest_file", args.split_manifest),
+            ("split_manifest_sha256", split_hash),
+        ]
+    )
 
     vector_records = []
     output_hashes = {}
@@ -441,39 +435,45 @@ def main():
             payload["residual_norm_mean"][ct] = residual_norm[key]
             payload["n_pairs"][ct] = len(meta)
             payload["pair_ids"][ct] = [m["pair_id"] for m in meta]
-            vector_records.append(OrderedDict([
-                ("contrast_type", family),
-                ("control_type", ct),
-                ("file", out_paths[family]),
-                ("key", f"vectors['{ct}']"),
-                ("n_pairs", len(meta)),
-                ("n_source_states", len({m["source_state_id"] for m in meta})),
-                ("n_conversations", len({m["conversation_id"] for m in meta})),
-                ("n_soft_flag_excluded", data[key]["n_soft_excluded"]),
-                ("target_belief_counts", dict(Counter(str(m.get("target_belief_canonical")) for m in meta))),
-                ("phase_counts", dict(Counter(str(m.get("phase")) for m in meta))),
-                ("vector_norm_by_layer", [round(x, 6) for x in v.norm(dim=-1).tolist()]),
-            ]))
+            vector_records.append(
+                OrderedDict(
+                    [
+                        ("contrast_type", family),
+                        ("control_type", ct),
+                        ("file", out_paths[family]),
+                        ("key", f"vectors['{ct}']"),
+                        ("n_pairs", len(meta)),
+                        ("n_source_states", len({m["source_state_id"] for m in meta})),
+                        ("n_conversations", len({m["conversation_id"] for m in meta})),
+                        ("n_soft_flag_excluded", data[key]["n_soft_excluded"]),
+                        ("target_belief_counts", dict(Counter(str(m.get("target_belief_canonical")) for m in meta))),
+                        ("phase_counts", dict(Counter(str(m.get("phase")) for m in meta))),
+                        ("vector_norm_by_layer", [round(x, 6) for x in v.norm(dim=-1).tolist()]),
+                    ]
+                )
+            )
         torch.save(payload, out_paths[family])
         output_hashes[os.path.basename(out_paths[family])] = sha256_file(out_paths[family])
         print(f"Saved {family} vectors -> {out_paths[family]}")
 
     metadata = OrderedDict(provenance)
-    metadata.update([
-        ("activation_files", act_hashes),
-        ("diagnostic_split", DIAGNOSTIC_SPLIT),
-        ("test_split_used", False),
-        ("resampling_unit", "conversation_id"),
-        ("n_bootstrap", args.n_bootstrap),
-        ("n_split_halves", args.n_split_halves),
-        ("seed", args.seed),
-        ("vectors", vector_records),
-        ("diagnostics_file", diagnostics_path),
-        ("diagnostics_sha256", sha256_file(diagnostics_path)),
-        ("output_files", output_hashes),
-        ("torch_version", torch.__version__),
-        ("python_version", platform.python_version()),
-    ])
+    metadata.update(
+        [
+            ("activation_files", act_hashes),
+            ("diagnostic_split", DIAGNOSTIC_SPLIT),
+            ("test_split_used", False),
+            ("resampling_unit", "conversation_id"),
+            ("n_bootstrap", args.n_bootstrap),
+            ("n_split_halves", args.n_split_halves),
+            ("seed", args.seed),
+            ("vectors", vector_records),
+            ("diagnostics_file", diagnostics_path),
+            ("diagnostics_sha256", sha256_file(diagnostics_path)),
+            ("output_files", output_hashes),
+            ("torch_version", torch.__version__),
+            ("python_version", platform.python_version()),
+        ]
+    )
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
     print(f"Metadata -> {metadata_path}")

@@ -26,6 +26,12 @@ uv run python scripts/run_experiment.py \
   --extension torrey-caa \
   --config configs/torrey-caa.yaml
 
+# Runnable walkthrough of every researcher-facing hook
+uv run python scripts/run_experiment.py \
+  --single-run \
+  --extension jasons-exp \
+  --config configs/default.yaml
+
 # Torrey’s extension: only closing turn 1, layers 1, 13, and 24
 uv run python scripts/run_experiment.py \
   --extension torrey-caa \
@@ -49,6 +55,13 @@ pipeline; it does not calculate controls, differences, or steering vectors.
 The `tris/` package is reserved for a future adapter but is not registered yet.
 An unknown name exits with a list of the currently registered extensions.
 
+The fully commented `jasons-exp` walkthrough is implemented in
+[`src/belief_revision/demo/jasons_exp.py`](src/belief_revision/demo/jasons_exp.py).
+It demonstrates every lifecycle hook, selective or all-layer activation
+capture, generated artifacts, Supabase reporting, and read-only research data
+access. Use it as a starting point and remove hooks a new experiment does not
+need.
+
 Torrey can normally edit
 [`configs/torrey-caa.yaml`](configs/torrey-caa.yaml) instead of changing the
 long command. Explicit `--torrey-caa-*` arguments override values from that
@@ -64,8 +77,8 @@ uv run python scripts/run_experiment.py --evaluator-mode disabled
 ```
 
 The checked-in Torrey configuration sets `evaluator.mode: enabled` and routes
-evaluation to DeepSeek. Use `--evaluator-mode disabled` to override that setting
-for an activation-only or infrastructure smoke run.
+evaluation through OpenRouter. Use `--evaluator-mode disabled` to override that
+setting for an activation-only or infrastructure smoke run.
 
 For vanilla or other configured runs, select the evaluator API and model in the
 YAML file:
@@ -73,12 +86,15 @@ YAML file:
 ```yaml
 evaluator:
   mode: enabled
-  provider: deepseek  # openai | anthropic | google | deepseek
-  model: deepseek-chat
+  provider: openrouter  # openai | anthropic | google | deepseek | openrouter
+  model: openai/gpt-4.1-mini
   max_tokens: 4096
 ```
 
 NDIF is not an evaluator option. User and assistant models continue to use it.
+Both `configs/default.yaml` and `configs/torrey-caa.yaml` currently select
+`openai/gpt-4.1-mini` through OpenRouter, which requires `OPENROUTER_API_KEY` in
+`.env`.
 
 ## Capture model activations
 

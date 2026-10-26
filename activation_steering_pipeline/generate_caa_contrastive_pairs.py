@@ -121,6 +121,7 @@ def extract_json(raw):
 def clean_user_turn(text):
     return re.sub(r"^\s*(?:user|control(?:led)?\s+message)\s*:\s*", "", text, flags=re.IGNORECASE).strip()
 
+
 # Bump when either generation prompt changes; part of every cache key.
 PROMPT_VERSION = "caa_cf_v1"
 
@@ -128,8 +129,8 @@ CONTRAST_ROLES = {"core_disconfirming": "core", "auxiliary": "auxiliary"}
 CONTROL_TYPES = ["neutral", "supportive"]
 
 # Word-count ratio (control / experimental) bounds.
-LENGTH_RATIO_SOFT = (0.80, 1.25)   # outside -> soft flag
-LENGTH_RATIO_HARD = (0.65, 1.50)   # outside -> retry, then hard flag
+LENGTH_RATIO_SOFT = (0.80, 1.25)  # outside -> soft flag
+LENGTH_RATIO_HARD = (0.65, 1.50)  # outside -> retry, then hard flag
 EVIDENCE_LENGTH_RATIO = (0.75, 1.30)
 
 REWRITE_TEMPERATURE = 0.2
@@ -140,20 +141,38 @@ SUBSTITUTE_MAX_ATTEMPTS = 4
 # Phrases that signal the original disconfirming finding. Seeing one in a
 # control text is a soft warning that the edit may have left the evidence in.
 DISCONFIRMING_CUES = [
-    "no better than", "no effect", "no benefit", "no clear", "no real",
-    "little evidence", "little consistent", "barely", "doesn't work",
-    "does not work", "didn't work", "did not work", "not effective",
-    "no difference", "same as placebo", "just placebo", "addressed",
-    "fixed that", "fixed those", "limited evidence", "evidence is limited",
+    "no better than",
+    "no effect",
+    "no benefit",
+    "no clear",
+    "no real",
+    "little evidence",
+    "little consistent",
+    "barely",
+    "doesn't work",
+    "does not work",
+    "didn't work",
+    "did not work",
+    "not effective",
+    "no difference",
+    "same as placebo",
+    "just placebo",
+    "addressed",
+    "fixed that",
+    "fixed those",
+    "limited evidence",
+    "evidence is limited",
 ]
 
-_STOPWORDS = set("""
+_STOPWORDS = set(
+    """
 a an the and or but if of to in on for with by from at as is are was were be been
 that this these those it its they them their there than then so such some many
 most more much very not no nor any all can could may might will would should
 about into over under after before during while which who whom whose what when
 where why how also only just still even same other another each both few several
-""".split())
+""".split()
+)
 
 _cache_lock = threading.Lock()
 
@@ -178,8 +197,7 @@ def word_count(text):
 
 
 def content_words(text):
-    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
-            if (len(w) >= 4 or w.isdigit()) and w not in _STOPWORDS}
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if (len(w) >= 4 or w.isdigit()) and w not in _STOPWORDS}
 
 
 def read_jsonl(path):
@@ -210,11 +228,7 @@ def freeze_source(input_path, out_dir):
     if os.path.exists(frozen):
         frozen_hash = sha256_file(frozen)
         if frozen_hash != src_hash:
-            sys.exit(
-                f"ERROR: {frozen} (sha256 {frozen_hash[:12]}) differs from {input_path} "
-                f"(sha256 {src_hash[:12]}). The pilot changed after it was frozen; "
-                f"use a new --out-dir or remove the frozen copy deliberately."
-            )
+            sys.exit(f"ERROR: {frozen} (sha256 {frozen_hash[:12]}) differs from {input_path} (sha256 {src_hash[:12]}). The pilot changed after it was frozen; use a new --out-dir or remove the frozen copy deliberately.")
     else:
         shutil.copyfile(input_path, frozen)
     return src_hash
@@ -226,8 +240,7 @@ def freeze_source(input_path, out_dir):
 def evidence_lookup(vignette_raw):
     """Canonical (un-counterbalanced) evidence items by id."""
     items = {}
-    for key in ("core_evidence_disconfirming", "core_evidence_supporting",
-                "core_evidence_ambiguous", "auxiliary_evidence"):
+    for key in ("core_evidence_disconfirming", "core_evidence_supporting", "core_evidence_ambiguous", "auxiliary_evidence"):
         for e in vignette_raw.get(key, []):
             items[e["id"]] = e
     return items
@@ -303,59 +316,61 @@ def extract_source_states(conversations, source_path, source_sha):
 
             probe_pre, probe_post = probe_context(conv.get("probe_outputs", []), entry["phase"])
 
-            states.append({
-                "source_state_id": f"{conversation_id}__t{turn}",
-                "conversation_id": conversation_id,
-                "cell_id": conv["cell_id"],
-                "replicate_index": conv["replicate_index"],
-                "seed": conv.get("seed"),
-                "vignette_id": conv["vignette_id"],
-                "domain": vignette.get("domain"),
-                "core_claim": vignette["core_claim"],
-                "phase": entry["phase"],
-                "turn_in_phase": entry["turn_in_phase"],
-                "global_turn_index": turn,
-                "n_prior_messages": len(history_before),
-                "contrast_type": contrast_type,
-                "evidence_role": role,
-                "evidence_id": entry["evidence_id"],
-                "evidence_text": ev["text"] if ev else None,
-                "evidence_strength": ev["strength"] if ev else entry.get("evidence_strength"),
-                "evidence_credibility": ev.get("credibility") if ev else row.get("evidence_credibility"),
-                "evidence_targets_display": entry.get("evidence_targets"),
-                "evidence_targets_canonical": ev.get("targets") if ev else None,
-                "target_belief": target_display,
-                "target_belief_canonical": target_canonical,
-                "target_belief_text": target_text,
-                "aux_order_condition": mapping["aux_order_condition"],
-                "canonical_to_display": mapping["canonical_to_display"],
-                "display_A1_text": mapping["display_A1_text"],
-                "display_A2_text": mapping["display_A2_text"],
-                "aux_gate_passed": row.get("aux_gate_passed") if contrast_type == "auxiliary" else None,
-                "active_auxiliaries_before_turn": prev_active,
-                "active_auxiliaries_after_user": entry.get("active_auxiliaries_after_user"),
-                "style_id": cell["style_profile"]["style_id"],
-                "style_profile": cell["style_profile"],
-                "affect": entry.get("user_affect"),
-                "initial_affect": plan.get("initial_affect"),
-                "trust_in_institutions": cell["trust_in_institutions"],
-                "conversation_goal": cell["conversation_goal"],
-                "belief_anchor_level": cell["belief_anchor_level"],
-                "core_order_condition": plan.get("core_order_condition"),
-                "elaboration_1_condition": plan.get("elaboration_1_condition"),
-                "elaboration_2_target_condition": plan.get("elaboration_2_target_condition"),
-                "user_belief_core": entry.get("user_belief_core"),
-                "user_confidence_core": entry.get("user_confidence_core"),
-                "probe_pre": probe_pre,
-                "probe_post": probe_post,
-                "experimental_text": entry["text"],
-                "experimental_original_response": assistant_reply,
-                "history_before": history_before,
-                "experimental_prompt": build_messages(system_prompt, history_before, entry["text"]),
-                "source_file": os.path.basename(source_path),
-                "source_sha256": source_sha,
-                "source_line": line_no,
-            })
+            states.append(
+                {
+                    "source_state_id": f"{conversation_id}__t{turn}",
+                    "conversation_id": conversation_id,
+                    "cell_id": conv["cell_id"],
+                    "replicate_index": conv["replicate_index"],
+                    "seed": conv.get("seed"),
+                    "vignette_id": conv["vignette_id"],
+                    "domain": vignette.get("domain"),
+                    "core_claim": vignette["core_claim"],
+                    "phase": entry["phase"],
+                    "turn_in_phase": entry["turn_in_phase"],
+                    "global_turn_index": turn,
+                    "n_prior_messages": len(history_before),
+                    "contrast_type": contrast_type,
+                    "evidence_role": role,
+                    "evidence_id": entry["evidence_id"],
+                    "evidence_text": ev["text"] if ev else None,
+                    "evidence_strength": ev["strength"] if ev else entry.get("evidence_strength"),
+                    "evidence_credibility": ev.get("credibility") if ev else row.get("evidence_credibility"),
+                    "evidence_targets_display": entry.get("evidence_targets"),
+                    "evidence_targets_canonical": ev.get("targets") if ev else None,
+                    "target_belief": target_display,
+                    "target_belief_canonical": target_canonical,
+                    "target_belief_text": target_text,
+                    "aux_order_condition": mapping["aux_order_condition"],
+                    "canonical_to_display": mapping["canonical_to_display"],
+                    "display_A1_text": mapping["display_A1_text"],
+                    "display_A2_text": mapping["display_A2_text"],
+                    "aux_gate_passed": row.get("aux_gate_passed") if contrast_type == "auxiliary" else None,
+                    "active_auxiliaries_before_turn": prev_active,
+                    "active_auxiliaries_after_user": entry.get("active_auxiliaries_after_user"),
+                    "style_id": cell["style_profile"]["style_id"],
+                    "style_profile": cell["style_profile"],
+                    "affect": entry.get("user_affect"),
+                    "initial_affect": plan.get("initial_affect"),
+                    "trust_in_institutions": cell["trust_in_institutions"],
+                    "conversation_goal": cell["conversation_goal"],
+                    "belief_anchor_level": cell["belief_anchor_level"],
+                    "core_order_condition": plan.get("core_order_condition"),
+                    "elaboration_1_condition": plan.get("elaboration_1_condition"),
+                    "elaboration_2_target_condition": plan.get("elaboration_2_target_condition"),
+                    "user_belief_core": entry.get("user_belief_core"),
+                    "user_confidence_core": entry.get("user_confidence_core"),
+                    "probe_pre": probe_pre,
+                    "probe_post": probe_post,
+                    "experimental_text": entry["text"],
+                    "experimental_original_response": assistant_reply,
+                    "history_before": history_before,
+                    "experimental_prompt": build_messages(system_prompt, history_before, entry["text"]),
+                    "source_file": os.path.basename(source_path),
+                    "source_sha256": source_sha,
+                    "source_line": line_no,
+                }
+            )
     return states
 
 
@@ -370,12 +385,7 @@ CONTROL_DEFINITIONS = {
         "tolerability, adherence, participant characteristics, or procedure). It "
         "must not support or undermine the core claim or the other auxiliary either."
     ),
-    "supportive": (
-        "SUPPORTIVE: reports a finding from the same kind of source whose "
-        "polarity is reversed, so that it supports the target belief to the same "
-        "degree the original undermines it. Do not make it stronger or weaker "
-        "than the original."
-    ),
+    "supportive": ("SUPPORTIVE: reports a finding from the same kind of source whose polarity is reversed, so that it supports the target belief to the same degree the original undermines it. Do not make it stronger or weaker than the original."),
 }
 
 SUBSTITUTE_SYSTEM_PROMPT = """You construct matched control stimuli for a psychology experiment on belief revision.
@@ -386,23 +396,23 @@ Return only valid JSON."""
 def build_substitute_prompt(vignette, ev, target_label, target_text, control_type, feedback=None):
     aux_lines = "\n".join(f"- {a['id']}: {a['text']}" for a in vignette["auxiliaries"])
     n_words = word_count(ev["text"])
-    prompt = f"""Core claim: {vignette['core_claim']}
+    prompt = f"""Core claim: {vignette["core_claim"]}
 Auxiliary beliefs:
 {aux_lines}
 
 Target belief ({target_label}): {target_text}
 
 Original evidence (it UNDERMINES the target belief):
-- text: {ev['text']}
-- strength: {ev['strength']}
-- credibility: {ev.get('credibility')}
+- text: {ev["text"]}
+- strength: {ev["strength"]}
+- credibility: {ev.get("credibility")}
 
 Write a control version of this evidence.
 {CONTROL_DEFINITIONS[control_type]}
 
 Hold everything else constant:
 - same kind of source (same study design, sample size, review type, or venue)
-- same strength ({ev['strength']}) and credibility ({ev.get('credibility')})
+- same strength ({ev["strength"]}) and credibility ({ev.get("credibility")})
 - same level of specificity and the same sentence structure where possible
 - reuse as many of the original words as possible; change only what carries the finding
 - about {n_words} words (stay within {int(n_words * 0.85)}-{int(n_words * 1.15) + 1})
@@ -419,10 +429,15 @@ def generate_substitute(model, vignette, ev, target_label, target_text, control_
     feedback = None
     last = None
     for attempt in range(1, SUBSTITUTE_MAX_ATTEMPTS + 1):
-        raw = call_model(model, [
-            {"role": "system", "content": SUBSTITUTE_SYSTEM_PROMPT},
-            {"role": "user", "content": build_substitute_prompt(vignette, ev, target_label, target_text, control_type, feedback)},
-        ], temperature=SUBSTITUTE_TEMPERATURE, max_tokens=300)
+        raw = call_model(
+            model,
+            [
+                {"role": "system", "content": SUBSTITUTE_SYSTEM_PROMPT},
+                {"role": "user", "content": build_substitute_prompt(vignette, ev, target_label, target_text, control_type, feedback)},
+            ],
+            temperature=SUBSTITUTE_TEMPERATURE,
+            max_tokens=300,
+        )
         try:
             parsed = extract_json(raw)
             text = (parsed.get("text") or "").strip()
@@ -519,18 +534,18 @@ def build_rewrite_prompt(state, sub, feedback=None):
     if len(prev_assistant) > 700:
         prev_assistant = prev_assistant[:700] + " ..."
     n_words = word_count(state["experimental_text"])
-    prompt = f"""A simulated human user is talking to an AI assistant about this claim: {state['core_claim']}
-The user's speaking style: {state['style_profile'].get('description')} (verbosity {state['style_profile'].get('verbosity')}, syntax {state['style_profile'].get('syntax')}).
+    prompt = f"""A simulated human user is talking to an AI assistant about this claim: {state["core_claim"]}
+The user's speaking style: {state["style_profile"].get("description")} (verbosity {state["style_profile"].get("verbosity")}, syntax {state["style_profile"].get("syntax")}).
 
 Previous assistant message (context only, do not edit):
 {prev_assistant}
 
 ORIGINAL user message, written after the user encountered this evidence:
-ORIGINAL EVIDENCE: {state['evidence_text']}
-ORIGINAL MESSAGE: {state['experimental_text']}
+ORIGINAL EVIDENCE: {state["evidence_text"]}
+ORIGINAL MESSAGE: {state["experimental_text"]}
 
 Rewrite the message as if the user had instead encountered this evidence:
-REPLACEMENT EVIDENCE ({sub['control_type']}): {sub['text']}
+REPLACEMENT EVIDENCE ({sub["control_type"]}): {sub["text"]}
 
 Rules:
 - change ONLY the words that report or paraphrase the evidence, plus the minimum needed so the user's reaction stays coherent with the replacement evidence
@@ -584,10 +599,15 @@ def generate_control_rewrite(model, state, sub):
     feedback = None
     best = None
     for attempt in range(1, REWRITE_MAX_ATTEMPTS + 1):
-        raw = call_model(model, [
-            {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
-            {"role": "user", "content": build_rewrite_prompt(state, sub, feedback)},
-        ], temperature=REWRITE_TEMPERATURE if attempt == 1 else REWRITE_TEMPERATURE + 0.2, max_tokens=400)
+        raw = call_model(
+            model,
+            [
+                {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                {"role": "user", "content": build_rewrite_prompt(state, sub, feedback)},
+            ],
+            temperature=REWRITE_TEMPERATURE if attempt == 1 else REWRITE_TEMPERATURE + 0.2,
+            max_tokens=400,
+        )
         try:
             parsed = extract_json(raw)
             text = clean_user_turn(parsed.get("control_text") or "")
@@ -615,8 +635,7 @@ def generate_control_rewrite(model, state, sub):
 
 
 def rewrite_cache_key(state, sub, model):
-    return sha256_text(PROMPT_VERSION, model, state["source_state_id"], sub["control_type"],
-                       state["experimental_text"], state["evidence_text"], sub["text"])
+    return sha256_text(PROMPT_VERSION, model, state["source_state_id"], sub["control_type"], state["experimental_text"], state["evidence_text"], sub["text"])
 
 
 def load_rewrite_cache(path):
@@ -649,8 +668,7 @@ def run_rewrites(states, substitutes, control_types, out_dir, model, workers, of
             elif not offline:
                 jobs.append((s, ct, sub, key))
 
-    print(f"Rewrites: {len(results)} cached, {len(jobs)} to generate"
-          + (f" (~{len(jobs)} API calls + retries)" if jobs else ""))
+    print(f"Rewrites: {len(results)} cached, {len(jobs)} to generate" + (f" (~{len(jobs)} API calls + retries)" if jobs else ""))
     if not jobs:
         return results
 
@@ -659,9 +677,7 @@ def run_rewrites(states, substitutes, control_types, out_dir, model, workers, of
 
     def work(s, ct, sub, key):
         out = generate_control_rewrite(model, s, sub)
-        rec = {"cache_key": key, "source_state_id": s["source_state_id"], "control_type": ct,
-               "rewrite_model": model, "prompt_version": PROMPT_VERSION,
-               "created_at": datetime.now(timezone.utc).isoformat(), **out}
+        rec = {"cache_key": key, "source_state_id": s["source_state_id"], "control_type": ct, "rewrite_model": model, "prompt_version": PROMPT_VERSION, "created_at": datetime.now(timezone.utc).isoformat(), **out}
         append_rewrite_cache(cache_path, rec)
         return rec
 
@@ -698,12 +714,12 @@ def load_tokenizer(name, enabled):
         return None, None
     try:
         from transformers import AutoTokenizer
+
         tok = AutoTokenizer.from_pretrained(name)
         revision = getattr(tok, "init_kwargs", {}).get("_commit_hash") or getattr(tok, "_commit_hash", None)
         return tok, revision
     except Exception as e:
-        print(f"WARNING: could not load tokenizer '{name}' ({type(e).__name__}: {e}); "
-              f"pairs will store chat messages without the rendered template.")
+        print(f"WARNING: could not load tokenizer '{name}' ({type(e).__name__}: {e}); pairs will store chat messages without the rendered template.")
         return None, None
 
 
@@ -731,10 +747,26 @@ def history_problems(messages):
 
 
 REQUIRED_FIELDS = [
-    "pair_id", "conversation_id", "cell_id", "replicate_index", "vignette_id", "phase",
-    "global_turn_index", "contrast_type", "control_type", "target_belief", "evidence_id",
-    "style_id", "affect", "trust_in_institutions", "conversation_goal", "belief_anchor_level",
-    "experimental_text", "control_text", "experimental_prompt", "control_prompt",
+    "pair_id",
+    "conversation_id",
+    "cell_id",
+    "replicate_index",
+    "vignette_id",
+    "phase",
+    "global_turn_index",
+    "contrast_type",
+    "control_type",
+    "target_belief",
+    "evidence_id",
+    "style_id",
+    "affect",
+    "trust_in_institutions",
+    "conversation_goal",
+    "belief_anchor_level",
+    "experimental_text",
+    "control_text",
+    "experimental_prompt",
+    "control_prompt",
 ]
 
 
@@ -745,29 +777,31 @@ def build_pair(state, ct, sub, rw, tokenizer):
     aux_ctrl = _aux_invoked(rw["control_text"], vignette_aux)
 
     pair = {k: v for k, v in state.items() if k not in ("history_before", "style_profile")}
-    pair.update({
-        "pair_id": f"{state['source_state_id']}__{ct}",
-        "control_type": ct,
-        "control_evidence_id": sub["control_evidence_id"],
-        "control_evidence_text": sub["text"],
-        "control_evidence_hand_edited": sub.get("hand_edited", False),
-        "control_text": rw["control_text"],
-        "control_prompt": control_prompt,
-        "experimental_prompt_rendered": render(tokenizer, state["experimental_prompt"]),
-        "control_prompt_rendered": render(tokenizer, control_prompt),
-        "experimental_word_count": word_count(state["experimental_text"]),
-        "control_word_count": word_count(rw["control_text"]),
-        "length_ratio": rw.get("length_ratio"),
-        "original_references_evidence": rw.get("original_references_evidence"),
-        "changed_spans": rw.get("changed_spans"),
-        "rewrite_attempts": rw.get("attempts"),
-        "rewrite_model": rw.get("rewrite_model"),
-        "prompt_version": rw.get("prompt_version"),
-        "aux_invoked_experimental": aux_exp,
-        "aux_invoked_control": aux_ctrl,
-        "leaked_terms": rw.get("leaked_terms", []),
-        "control_cue_hits": rw.get("control_cue_hits", []),
-    })
+    pair.update(
+        {
+            "pair_id": f"{state['source_state_id']}__{ct}",
+            "control_type": ct,
+            "control_evidence_id": sub["control_evidence_id"],
+            "control_evidence_text": sub["text"],
+            "control_evidence_hand_edited": sub.get("hand_edited", False),
+            "control_text": rw["control_text"],
+            "control_prompt": control_prompt,
+            "experimental_prompt_rendered": render(tokenizer, state["experimental_prompt"]),
+            "control_prompt_rendered": render(tokenizer, control_prompt),
+            "experimental_word_count": word_count(state["experimental_text"]),
+            "control_word_count": word_count(rw["control_text"]),
+            "length_ratio": rw.get("length_ratio"),
+            "original_references_evidence": rw.get("original_references_evidence"),
+            "changed_spans": rw.get("changed_spans"),
+            "rewrite_attempts": rw.get("attempts"),
+            "rewrite_model": rw.get("rewrite_model"),
+            "prompt_version": rw.get("prompt_version"),
+            "aux_invoked_experimental": aux_exp,
+            "aux_invoked_control": aux_ctrl,
+            "leaked_terms": rw.get("leaked_terms", []),
+            "control_cue_hits": rw.get("control_cue_hits", []),
+        }
+    )
     return pair
 
 
@@ -837,9 +871,7 @@ def apply_qc(pairs):
 
 
 def qc_report(pairs, states, control_types, missing_rewrites):
-    report = {"n_source_states": len(states), "n_pairs": len(pairs),
-              "n_missing_rewrites": len(missing_rewrites), "missing_rewrites": missing_rewrites[:50],
-              "by_dataset": {}}
+    report = {"n_source_states": len(states), "n_pairs": len(pairs), "n_missing_rewrites": len(missing_rewrites), "missing_rewrites": missing_rewrites[:50], "by_dataset": {}}
     groups = defaultdict(list)
     for p in pairs:
         groups[(p["contrast_type"], p["control_type"])].append(p)
@@ -873,12 +905,30 @@ def write_manual_review_sample(pairs, path, per_stratum, seed):
     for key in sorted(strata):
         ps = sorted(strata[key], key=lambda p: p["pair_id"])
         sample.extend(rng.sample(ps, min(per_stratum, len(ps))))
-    cols = ["pair_id", "contrast_type", "control_type", "target_belief", "target_belief_canonical",
-            "evidence_id", "style_id", "affect", "conversation_goal", "evidence_text",
-            "control_evidence_text", "experimental_text", "control_text", "length_ratio",
-            "qc_pass", "qc_hard_flags", "qc_soft_flags",
-            "review_minimal_edit_ok", "review_polarity_ok", "review_target_unchanged",
-            "review_style_matched", "review_notes"]
+    cols = [
+        "pair_id",
+        "contrast_type",
+        "control_type",
+        "target_belief",
+        "target_belief_canonical",
+        "evidence_id",
+        "style_id",
+        "affect",
+        "conversation_goal",
+        "evidence_text",
+        "control_evidence_text",
+        "experimental_text",
+        "control_text",
+        "length_ratio",
+        "qc_pass",
+        "qc_hard_flags",
+        "qc_soft_flags",
+        "review_minimal_edit_ok",
+        "review_polarity_ok",
+        "review_target_unchanged",
+        "review_style_matched",
+        "review_notes",
+    ]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
@@ -899,8 +949,7 @@ def main():
     ap.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     ap.add_argument("--control-types", nargs="+", default=CONTROL_TYPES, choices=CONTROL_TYPES)
     ap.add_argument("--rewrite-model", default=USER_SIM_MODEL)
-    ap.add_argument("--limit", type=int, default=None,
-                    help="only use the first N source states of each contrast type (for testing)")
+    ap.add_argument("--limit", type=int, default=None, help="only use the first N source states of each contrast type (for testing)")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--budget", type=int, default=DAILY_CALL_BUDGET, help="max API calls this run")
     ap.add_argument("--offline", action="store_true", help="make no API calls; build pairs from caches only")
@@ -925,14 +974,12 @@ def main():
         by_type = defaultdict(list)
         for s in states:
             by_type[s["contrast_type"]].append(s)
-        states = [s for t in sorted(by_type) for s in by_type[t][:args.limit]]
+        states = [s for t in sorted(by_type) for s in by_type[t][: args.limit]]
     n_core = sum(s["contrast_type"] == "core" for s in states)
     print(f"Source states: {n_core} core, {len(states) - n_core} auxiliary")
 
-    substitutes, sub_path = load_or_create_substitutes(
-        states, args.control_types, conversations, args.out_dir, args.rewrite_model, args.offline)
-    rewrites = run_rewrites(states, substitutes, args.control_types, args.out_dir,
-                            args.rewrite_model, args.workers, args.offline)
+    substitutes, sub_path = load_or_create_substitutes(states, args.control_types, conversations, args.out_dir, args.rewrite_model, args.offline)
+    rewrites = run_rewrites(states, substitutes, args.control_types, args.out_dir, args.rewrite_model, args.workers, args.offline)
 
     tokenizer, tok_revision = load_tokenizer(args.tokenizer, not args.no_render)
 
@@ -978,10 +1025,7 @@ def main():
         "control_types": args.control_types,
         "limit": args.limit,
         "api_calls_used": calls_used(),
-        "outputs": {
-            os.path.basename(p): sha256_file(p)
-            for p in (core_path, aux_path, sub_path, report_path, review_path) if os.path.exists(p)
-        },
+        "outputs": {os.path.basename(p): sha256_file(p) for p in (core_path, aux_path, sub_path, report_path, review_path) if os.path.exists(p)},
         "counts": {k: v["n_pairs"] for k, v in report["by_dataset"].items()},
     }
     with open(os.path.join(args.out_dir, "caa_pairs_manifest.json"), "w", encoding="utf-8") as f:
@@ -989,8 +1033,7 @@ def main():
 
     print("\n=== Summary ===")
     for k, v in report["by_dataset"].items():
-        print(f"  {k:22s} pairs={v['n_pairs']:4d}  qc_pass={v['n_qc_pass']:4d}  "
-              f"len_ratio median={v['length_ratio']['median']}  hard={v['hard_flags']}  soft={v['soft_flags']}")
+        print(f"  {k:22s} pairs={v['n_pairs']:4d}  qc_pass={v['n_qc_pass']:4d}  len_ratio median={v['length_ratio']['median']}  hard={v['hard_flags']}  soft={v['soft_flags']}")
     if missing:
         print(f"  {len(missing)} pair(s) missing a rewrite or substitute (see {report_path})")
     print(f"  wrote {core_path}, {aux_path}")
