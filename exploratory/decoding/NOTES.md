@@ -34,7 +34,7 @@ uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     
 ```
 
 ## Things found while building it
-- **Double BOS.** The run pipeline renders the chat template to text (which starts with `<|begin_of_text|>`) and then the tokenizer adds another BOS, so every prompt starts `[128000, 128000, ...]`. Extraction mirrors this exactly so positions and activations match the live runs. Probably harmless, but worth telling Jason.
+- **Double BOS.** The run pipeline renders the chat template to text (which starts with `<|begin_of_text|>`) and then the tokenizer adds another BOS, so every prompt starts `[128000, 128000, ...]`. Extraction mirrors this exactly so positions and activations match the live runs. Probably harmless, but worth telling Jason & Tris.
 - **Auxiliary labels are in display order.** With `aux_order_condition="reversed"`, the evaluator's `belief_A1` is the *contextual* auxiliary. `make_labels.py` maps back to canonical (A1 = methodological, A2 = contextual) via `canonical_to_display_A1/A2`. Not yet verified against the probe prompt template wording.
 - The stored assistant text is `.strip()`ped, so `reply_*` positions are on re-tokenized text, not the originally generated token ids.
 - `scripts/` is under the 100% coverage gate, so this work lives in `exploratory/decoding/` (not under that gate). Ruff-clean.
@@ -46,14 +46,17 @@ uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     
 - **Label variance and reliability.** If Llama-8B barely updates, within-cell variance is small. Check variance and evaluator test-retest first. Rerun the small test first: the existing test run predates the 0-100 scale sentence and is not meaningful.
 - **Orthogonality needs a null.** Core and aux scores are behaviorally correlated. Use cross-prediction, partial out core when decoding aux, and a split-half same-belief cosine as the ceiling.
 - **Technical.** Standardize per dimension (massive-activation dims), nested-CV alpha per layer, report Pearson r alongside R2 for cross-checkpoint transfer, permutation null with the max over layers.
-- Decodable is not used: steer or ablate along the direction later to test causal use.
+- Decodable != used: steer or ablate along the direction later to test causal use.
 
 ## Next steps
-1. Fix/confirm the evaluator prompt (scale sentence is committed), then run the full `politics_03` experiment under a new `--run-name`, evaluator on (no activation extension needed).
+1. Fix/confirm the evaluator prompt (scale sentence is committed), then run the full `politics_03` experiment under a new `--run-name`, evaluator on (no activation extension needed). (Ongoing)
 2. Run the extraction on that run (all layers, all four positions).
 3. Write the analysis script: ridge per layer/position, grouped CV, baselines above, transfer matrices, decoder cosines.
 4. Decide whether to commit `exploratory/decoding/` and `data/vignettes_politics_03.json`.
 
 ## Open questions
-- Which positions do collaborators use (reply-end vs prompt-end)?
+- Which positions do collaborators use (reply-end vs prompt-end - I think prompt end for Torrey and reply end for Qingqing)?
 - Keep Gemma-2-9B as the user simulator? Changing it later changes the transcripts.
+
+## Scale check (`check_scale.py`)
+Written 2026-10-27, tested only on synthetic data (one injected huge dimension plus a real signal). It correctly flags the injected dimension (top-5 dims carry 99.7% of variance, max/median std about 270). Raw and standardized ridge scored about the same there, because the penalty is tuned by leave-one-out and the huge dimension was uninformative. So expect standardizing to matter most for weight cosines and for distance-based analyses, not necessarily for R2. Run it on the real activations first: `check_scale.py --run runs/NAME --position prompt_end`.
