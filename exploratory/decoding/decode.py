@@ -5,6 +5,20 @@ Targets, for each of core / A1 / A2 (auxiliaries are canonical, see make_labels.
   absdev   |score - 50|, how far from neutral          (regression, R^2)
   endorse  1 if score > 50, 0 if < 50, dropped at 50   (AUC of the ridge output)
 
+With --labels endorsement the targets come instead from endorsement_probe.py
+(<run>/endorsement/scores.csv), per claim (core / A1 / A2), all regression:
+  dE        endorsement change from the claim-only baseline, AB format, mean of both A/B mappings
+  dEA, dEB  the same for the A_endorse and B_endorse mappings separately
+  dU        withhold-vs-commit change, ABC format, mean of both mappings
+  dqW       change in the probability of "Withhold judgment", ABC format, mean of both mappings
+Within one vignette the baseline is a constant per claim, so a change score
+decodes exactly like the raw score; the baseline matters once vignettes are pooled.
+
+Feature sets: the four positions from extract_activations.py, plus
+"probe:<claim>:<mapping>" = the hidden state at the probe's "Answer:" token
+(AB format) from endorsement_probe.py.  That one is a positive control: it is
+read just before the model answers the probe itself.
+
 Analyses, for every feature set (each layer of each token position, plus text):
   pooled_model  one ridge trained on all checkpoints, scored overall and per test checkpoint
   within        train and test on the same checkpoint (held-out conversations)
@@ -23,12 +37,14 @@ Usage:
   python exploratory/decoding/decode.py --run runs/NAME --text-only
   python exploratory/decoding/decode.py --run runs/NAME --positions prompt_end,reply_last
   python exploratory/decoding/decode.py --run runs/NAME --positions prompt_end --layers 14 --out-name test
+  python exploratory/decoding/decode.py --run runs/NAME --labels endorsement --positions prompt_end,reply_eot,probe:core:A_endorse --out-name endorsement
 Writes <run>/decoding/<out-name>.csv (default name: results).
 """
 
 import re
 import json
 import numpy as np
+import torch
 import pandas as pd
 import argparse
 from check_scale import load_samples
@@ -54,12 +70,51 @@ def build_targets(labels: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, index=labels.index)
 
 
-def align(keys: pd.DataFrame, labels: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray]:
+ENDORSEMENT_TARGETS = {"dE": ("AB", None, "dE"), "dEA": ("AB", "A_endorse", "dE"), "dEB": ("AB", "B_endorse", "dE"), "dU": ("ABC", None, "dU"), "dqW": ("ABC", None, "dq_withhold")}
+
+
+def endorsement_labels(run: Path) -> pd.DataFrame:
+    """One row per (conversation, checkpoint) with <claim>_<target> columns from the endorsement probe."""
+
+    scores = pd.read_csv(run / "endorsement" / "scores.csv")
+    keys = ["cell_id", "replicate_index", "phase"]
+    columns = []
+    for target, (fmt, mapping, value) in ENDORSEMENT_TARGETS.items():
+        subset = scores[(scores["format"] == fmt) & ((scores["mapping"] == mapping) if mapping else True)]
+        table = subset.groupby([*keys, "claim"])[value].mean().unstack("claim")
+        table.columns = [f"{claim}_{target}" for claim in table.columns]
+        columns.append(table)
+    return pd.concat(columns, axis=1).reset_index()
+
+
+def target_columns(labels: pd.DataFrame, source: str) -> list[str]:
+    """Columns that must be present for a sample to be used."""
+
+    if source == "evaluator":
+        return list(BELIEFS.values())
+    return [c for c in labels.columns if c.split("_")[0] in BELIEFS]
+
+
+def align(keys: pd.DataFrame, labels: pd.DataFrame, required: list[str]) -> tuple[pd.DataFrame, np.ndarray]:
     """Merge activation-file keys with labels; returns the merged table and a keep mask."""
 
     merged = keys.merge(labels, on=["cell_id", "replicate_index", "phase"], how="left")
-    keep = merged["belief_core"].notna().to_numpy() & merged[BELIEFS["A1"]].notna().to_numpy() & merged[BELIEFS["A2"]].notna().to_numpy()
+    keep = merged[required].notna().all(axis=1).to_numpy()
     return merged[keep].reset_index(drop=True), keep
+
+
+def load_probe_samples(run: Path, claim: str, mapping: str) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
+    """Hidden state at the probe's "Answer:" token for one claim and mapping: [n, n_layers, d]."""
+
+    claims, mappings = ["core", "A1", "A2"], ["A_endorse", "B_endorse"]
+    arrays, rows, layers = [], [], None
+    for path in sorted((run / "endorsement").glob("*__rep*.pt")):
+        saved = torch.load(path)
+        layers = saved["layers"]
+        for c, phase in enumerate(saved["phases"]):
+            arrays.append(saved["hidden"][c, claims.index(claim), mappings.index(mapping)].float().numpy())
+            rows.append({"cell_id": saved["cell_id"], "replicate_index": saved["replicate_index"], "phase": phase})
+    return np.stack(arrays), pd.DataFrame(rows), layers
 
 
 def fold_ids(groups: np.ndarray, seed: int = 0) -> np.ndarray:
@@ -259,25 +314,32 @@ def main() -> None:
     parser.add_argument("--layers", default=None, help="Comma-separated layer numbers (default: all).")
     parser.add_argument("--text-only", action="store_true")
     parser.add_argument("--group-by", choices=("conversation", "cell"), default="conversation")
+    parser.add_argument("--labels", choices=("evaluator", "endorsement"), default="evaluator", help="Target source: API evaluator scores (labels.csv) or the endorsement probe (endorsement/scores.csv).")
     parser.add_argument("--out-name", default="results")
     args = parser.parse_args()
 
-    labels = pd.read_csv(args.run / "labels.csv")
+    labels = pd.read_csv(args.run / "labels.csv") if args.labels == "evaluator" else endorsement_labels(args.run)
+    required = target_columns(labels, args.labels)
     out_dir = args.run / "decoding"
     out_dir.mkdir(exist_ok=True)
     out_path = out_dir / f"{args.out_name}.csv"
     rows: list[dict[str, object]] = []
 
     def prepare(keys: pd.DataFrame):
-        merged, keep = align(keys, labels)
+        merged, keep = align(keys, labels, required)
         phase = merged["phase"].map({p: i for i, p in enumerate(PHASES)}).to_numpy()
         group = merged["cell_id"] if args.group_by == "cell" else merged["cell_id"] + "__" + merged["replicate_index"].astype(str)
-        y, names = build_label_matrix(build_targets(merged), phase)
+        targets = build_targets(merged) if args.labels == "evaluator" else merged[required]
+        y, names = build_label_matrix(targets, phase)
         return merged, keep, phase, fold_ids(group.to_numpy()), y, names
 
     merged = None
     for position in [] if args.text_only else args.positions.split(","):
-        x, keys, layers = load_samples(args.run, position)
+        if position.startswith("probe:"):
+            _, claim, mapping = position.split(":")
+            x, keys, layers = load_probe_samples(args.run, claim, mapping)
+        else:
+            x, keys, layers = load_samples(args.run, position)
         merged, keep, phase, folds, y, names = prepare(keys)
         x = x[keep]
         wanted = [int(v) for v in args.layers.split(",")] if args.layers else layers
