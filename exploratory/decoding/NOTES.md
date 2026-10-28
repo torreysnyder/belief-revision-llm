@@ -48,6 +48,12 @@ uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     
 - **Technical.** Standardize per dimension (massive-activation dims), nested-CV alpha per layer, report Pearson r alongside R2 for cross-checkpoint transfer, permutation null with the max over layers.
 - Decodable != used: steer or ablate along the direction later to test causal use.
 
+## Progress log
+- 2026-10-27: extraction and label scripts drafted, smoke-tested on NDIF, committed (`ecfb753`); scale check added (`38d2356`).
+- 2026-10-27/28: full `politics_03` behavioral run done: `runs/politics03-llama8b-full/` (864/864 conversations, Llama-3.1-8B-Instruct target, Gemma-2-9B user, OpenRouter gpt-4.1-mini evaluator, scale sentence in the evaluator prompt). `labels.csv` has 3,456 checkpoint rows; 68 (about 2%) have null probe scores (cause not yet checked).
+- Behavioral result: core belief barely moves across checkpoints (mean 35.5 intro, 32.9 core_challenge_1, 33.2 core_challenge_2, 37.6 closing; SD about 10-12; within-cell SD about 10). A2 (contextual) is higher, around 56-60. Replicate-level variation dominates, so check evaluator test-retest before interpreting decoding.
+- 2026-10-28: all-layer activation extraction started on that run (4 workers), output in `runs/politics03-llama8b-full/activations/`, log in `extract.log`.
+
 ## Next steps
 1. Fix/confirm the evaluator prompt (scale sentence is committed), then run the full `politics_03` experiment under a new `--run-name`, evaluator on (no activation extension needed). (Ongoing)
 2. Run the extraction on that run (all layers, all four positions).
