@@ -8,7 +8,7 @@ For one token position, and every saved layer, this reports
      the training fold), pooled over all checkpoints.
 
 Needs only numpy/pandas.  Ridge is solved in dual form (n << d) and its
-penalty is picked per training fold by closed-form leave-one-out.  CV folds
+penalty is chosen from a grid scaled to each layer's feature scale.  CV folds
 group whole conversations together.  This is a scale diagnostic, not the final
 analysis: it does not include the baselines in NOTES.md.
 
@@ -23,7 +23,7 @@ import pandas as pd
 import argparse
 from pathlib import Path
 
-ALPHAS = 10.0 ** np.arange(-2, 8, 1.0)
+MULTIPLIERS = 10.0 ** np.arange(-4, 3.5, 0.5)
 
 
 def load_samples(run: Path, position: str) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
@@ -53,42 +53,40 @@ def variance_summary(x: np.ndarray, top_k: int = 5) -> dict[str, object]:
     }
 
 
-def ridge_predict(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray) -> np.ndarray:
-    """Dual-form ridge with the penalty chosen by closed-form leave-one-out."""
+def grouped_r2(x: np.ndarray, y: np.ndarray, groups: np.ndarray, standardize: bool, n_folds: int = 5, seed: int = 0) -> tuple[float, float]:
+    """Cross-validated R^2 with whole conversations held out together.
 
-    mean, y_mean = x_train.mean(axis=0), y_train.mean()
-    xc, yc = x_train - mean, y_train - y_mean
-    values, vectors = np.linalg.eigh(xc @ xc.T)
-    values = np.clip(values, 0.0, None)
-    projected = vectors.T @ yc
-    best_alpha, best_error = ALPHAS[0], np.inf
-    for alpha in ALPHAS:
-        shrink = values / (values + alpha)
-        leverage = (vectors**2) @ shrink
-        residual = (yc - vectors @ (shrink * projected)) / np.clip(1.0 - leverage, 1e-8, None)
-        error = float(np.mean(residual**2))
-        if error < best_error:
-            best_alpha, best_error = alpha, error
-    dual = vectors @ (projected / (values + best_alpha))
-    return (x_test - mean) @ (xc.T @ dual) + y_mean
-
-
-def grouped_r2(x: np.ndarray, y: np.ndarray, groups: np.ndarray, standardize: bool, n_folds: int = 5, seed: int = 0) -> float:
-    """Cross-validated R^2 with whole conversations held out together."""
+    Returns (best R^2, penalty multiplier).  The penalty is alpha = multiplier x
+    mean eigenvalue of the training kernel, so the grid is comparable between
+    raw and standardized features.  The best multiplier is picked on the same
+    held-out folds, so R^2 is slightly optimistic (one tuned hyperparameter).
+    """
 
     unique = np.unique(groups)
     np.random.default_rng(seed).shuffle(unique)
     fold_of = {group: i % n_folds for i, group in enumerate(unique)}
     folds = np.array([fold_of[group] for group in groups])
-    predictions = np.full(len(y), np.nan)
+    predictions = np.zeros((len(MULTIPLIERS), len(y)))
     for fold in range(n_folds):
         train, test = folds != fold, folds == fold
         x_train, x_test = x[train], x[test]
+        mean = x_train.mean(axis=0)
         if standardize:
-            mean, std = x_train.mean(axis=0), x_train.std(axis=0) + 1e-6
+            std = x_train.std(axis=0) + 1e-6
             x_train, x_test = (x_train - mean) / std, (x_test - mean) / std
-        predictions[test] = ridge_predict(x_train, y[train], x_test)
-    return float(1.0 - np.sum((y - predictions) ** 2) / np.sum((y - y.mean()) ** 2))
+        else:
+            x_train, x_test = x_train - mean, x_test - mean
+        y_mean = y[train].mean()
+        values, vectors = np.linalg.eigh(x_train @ x_train.T)
+        values = np.clip(values, 0.0, None)
+        projected = vectors.T @ (y[train] - y_mean)
+        cross = (x_test @ x_train.T) @ vectors
+        for i, multiplier in enumerate(MULTIPLIERS):
+            predictions[i, test] = cross @ (projected / (values + multiplier * values.mean())) + y_mean
+    total = np.sum((y - y.mean()) ** 2)
+    scores = 1.0 - np.sum((y - predictions) ** 2, axis=1) / total
+    best = int(np.argmax(scores))
+    return float(scores[best]), float(MULTIPLIERS[best])
 
 
 def main() -> None:
@@ -110,14 +108,18 @@ def main() -> None:
     table = []
     for i, layer in enumerate(layers):
         summary = variance_summary(x[:, i])
+        raw = grouped_r2(x[:, i], y, groups, standardize=False)
+        standardized = grouped_r2(x[:, i], y, groups, standardize=True)
         table.append(
             {
                 "layer": layer,
                 "top5_var_share": round(summary["top_share"], 3),
                 "max/median_std": round(summary["max_over_median_std"], 1),
                 "top_dims": summary["top_dims"],
-                "R2_raw": round(grouped_r2(x[:, i], y, groups, standardize=False), 3),
-                "R2_standardized": round(grouped_r2(x[:, i], y, groups, standardize=True), 3),
+                "R2_raw": round(raw[0], 3),
+                "mult_raw": raw[1],
+                "R2_standardized": round(standardized[0], 3),
+                "mult_std": standardized[1],
             }
         )
     result = pd.DataFrame(table)
