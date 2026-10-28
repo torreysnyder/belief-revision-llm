@@ -78,3 +78,19 @@ uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     
 
 ## Scale check (`check_scale.py`)
 Written 2026-10-27, tested only on synthetic data (one injected huge dimension plus a real signal). It correctly flags the injected dimension (top-5 dims carry 99.7% of variance, max/median std about 270). Raw and standardized ridge scored about the same there, because the penalty is tuned by leave-one-out and the huge dimension was uninformative. So expect standardizing to matter most for weight cosines and for distance-based analyses, not necessarily for R2. Run it on the real activations first: `check_scale.py --run runs/NAME --position prompt_end`.
+
+## Endorsement probe (alternative target to the API evaluator), started 2026-10-28
+Motivation: the evaluator scores the transcript text, so decoding its scores from activations cannot beat a text baseline by much. A collaborator's design asks the target model itself.
+
+`endorsement_probe.py`, run post hoc on `dialogues.jsonl` (the probe never enters the conversation, so this is equivalent to running it live and works on existing runs):
+- Prompt: target system prompt + dialogue through the checkpoint's assistant reply + a new user turn `Claim: "<claim>"` / "Given the claim above, which answer best matches your current stance?" / `A. Endorse` `B. Reject` (`C. Withhold judgment` in the ABC format) + assistant prefill `Answer:`.
+- Claims: core, A1, A2 (canonical texts from the unshuffled vignette). Mappings: A_endorse (A=Endorse) and B_endorse (A=Reject). Formats: AB and ABC (C always Withhold). Claim-only baseline: system prompt + probe, no dialogue (`baseline.pt`).
+- Readout from next-token logits at the final `Answer:` token: s_X = logsumexp(z["X"], z[" X"]); E = s_Endorse - s_Reject; ABC: softmax q over (E, R, W) and U = s_W - logsumexp(s_E, s_R). Change scores dE, dU, dq_withhold vs the baseline.
+- Hidden state saved at the `Answer:` token, all layers, AB format only: `[4 checkpoints, 3 claims, 2 mappings, 32, 4096]` float16 per conversation (about 6 MB; about 5.4 GB for 864).
+- One NDIF request per (conversation, checkpoint), batching the 12 prompts (3 claims x 2 mappings x 2 formats) with left padding. Verified: batched vs single prompt cosine 0.9999, logits within 0.125 (one bf16 step at that magnitude). Logits come back in bf16, so E has a resolution of roughly 0.125-0.25.
+- Smoke test (one conversation, intro): Llama rejects the core claim (E about -4 to -6 in both mappings) and endorses A1 (E +2 to +5) and A2 (E +1 to +3.5).
+- `--collect` writes `endorsement/scores.csv` (one row per probe).
+
+Differences from the collaborator's write-up: Llama-3.1-8B (32 layers, d=4096) instead of Qwen2.5-7B; one vignette with many conversations rather than 10 claims split train/val/test by claim, so folds hold out conversations (or cells with `--group-by cell`); within one vignette dE is E shifted by a constant, so baseline subtraction does not change decoding (it will once vignettes are pooled; the paper also centers h on the baseline hidden state, which matters for the same reason). The dialogue-position analogue of their final `<|im_end|>` is our `reply_eot`.
+
+`decode.py --labels endorsement` uses the probe targets (`<claim>_dE`, `_dEA`, `_dEB`, `_dU`, `_dqW`) with the same analyses and baselines, including the TF-IDF text baseline (still needed: the probe is a different readout, but text could still predict it). Feature sets can include `probe:<claim>:<mapping>` (the probe's own Answer-token state, a positive control).
