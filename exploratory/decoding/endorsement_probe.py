@@ -138,12 +138,13 @@ def readout(logits: torch.Tensor, mapping: str, fmt: str) -> dict[str, float]:
     return out
 
 
-def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, str], layers: list[int], option_ids: list[int]) -> tuple[list[dict[str, object]], torch.Tensor]:
-    """Run all 12 probes for one dialogue prefix; returns score rows and AB hidden [3, 2, n_layers, d]."""
+def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, str], layers: list[int], option_ids: list[int], batch_size: int) -> tuple[list[dict[str, object]], torch.Tensor]:
+    """Run all 12 probes for one dialogue prefix, batch_size prompts per NDIF request; returns score rows and AB hidden [3, 2, n_layers, d]."""
 
     specs = probe_specs()
     texts = [probe_text(model.tokenizer, prefix, claims[claim], mapping, fmt) for claim, mapping, fmt in specs]
-    hidden, logits = run_batch(model, texts, layers, option_ids)
+    chunks = [run_batch(model, texts[i : i + batch_size], layers, option_ids) for i in range(0, len(texts), batch_size)]
+    hidden, logits = torch.cat([h for h, _ in chunks]), torch.cat([g for _, g in chunks])
     rows, ab_hidden = [], torch.zeros(len(CLAIMS), len(MAPPINGS), len(layers), hidden.shape[-1])
     for i, (claim, mapping, fmt) in enumerate(specs):
         rows.append({"claim": claim, "mapping": mapping, "format": fmt, **readout(logits[i], mapping, fmt)})
@@ -152,19 +153,19 @@ def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, st
     return rows, ab_hidden
 
 
-def run_baseline(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int]) -> None:
+def run_baseline(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int) -> None:
     """Claim-only probes (system prompt + probe, no dialogue)."""
 
     path = out_dir / "baseline.pt"
     if path.exists():
         return
     prefix = [{"role": "system", "content": make_target_system_prompt()}]
-    rows, hidden = probe_prefix_batch(model, prefix, claim_texts(record), layers, option_ids)
+    rows, hidden = probe_prefix_batch(model, prefix, claim_texts(record), layers, option_ids, batch_size)
     torch.save({"vignette_id": record["vignette_id"], "layers": layers, "scores": rows, "hidden": hidden.to(torch.float16)}, path)
     print(f"saved {path.name}")
 
 
-def process(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int]) -> str:
+def process(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int) -> str:
     """Probe one conversation at every checkpoint, skipping it if already saved."""
 
     path = out_dir / f"{record['cell_id']}__rep{record['replicate_index']}.pt"
@@ -177,7 +178,7 @@ def process(model, record: dict[str, object], out_dir: Path, layers: list[int], 
         prefix = messages[: 1 + 2 * int(checkpoint["global_turn_index"])]  # system + every turn through this reply
         if prefix[-1]["role"] != "assistant":
             raise ValueError(f"checkpoint {checkpoint['phase']} does not end on an assistant reply")
-        rows, ab_hidden = probe_prefix_batch(model, prefix, claims, layers, option_ids)
+        rows, ab_hidden = probe_prefix_batch(model, prefix, claims, layers, option_ids, batch_size)
         scores += [{"phase": checkpoint["phase"], **row} for row in rows]
         hidden.append(ab_hidden)
     torch.save({"cell_id": record["cell_id"], "replicate_index": record["replicate_index"], "layers": layers, "phases": [c["phase"] for c in checkpoint_turns()], "scores": scores, "hidden": torch.stack(hidden).to(torch.float16)}, path)
@@ -210,7 +211,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=None, help="Output folder (default: <run>/endorsement).")
     parser.add_argument("--layers", default=None, help="Comma-separated zero-based layers (default: all).")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--max-workers", type=int, default=4)
+    parser.add_argument("--max-workers", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, default=4, help="Probe prompts per NDIF request (12 per checkpoint); lower it if the remote GPU runs out of memory.")
     parser.add_argument("--dry-run", action="store_true", help="Print one probe prompt and the option token ids; no NDIF call.")
     parser.add_argument("--collect", action="store_true", help="Only gather saved scores into scores.csv.")
     args = parser.parse_args()
@@ -244,10 +246,10 @@ def main() -> None:
     layers = [int(x) for x in args.layers.split(",")] if args.layers else list(range(len(model.model.layers)))
     option_ids = option_token_ids(model.tokenizer)
     out_dir.mkdir(parents=True, exist_ok=True)
-    run_baseline(model, records[0], out_dir, layers, option_ids)
+    run_baseline(model, records[0], out_dir, layers, option_ids, args.batch_size)
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as pool:
-        futures = {pool.submit(process, model, record, out_dir, layers, option_ids): record for record in records}
+        futures = {pool.submit(process, model, record, out_dir, layers, option_ids, args.batch_size): record for record in records}
         for done, future in enumerate(as_completed(futures), 1):
             record = futures[future]
             try:
