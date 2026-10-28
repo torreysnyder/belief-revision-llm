@@ -48,6 +48,7 @@ Usage:
   python exploratory/decoding/endorsement_probe.py --run runs/NAME --collect
 """
 
+import sys
 import json
 import torch
 import pandas as pd
@@ -217,6 +218,8 @@ def main() -> None:
     parser.add_argument("--collect", action="store_true", help="Only gather saved scores into scores.csv.")
     args = parser.parse_args()
 
+    for stream in (sys.stdout, sys.stderr):  # NDIF status lines use symbols the Windows default codec can't encode when output is redirected
+        stream.reconfigure(encoding="utf-8", errors="replace")
     load_dotenv()
     out_dir = args.out or args.run / "endorsement"
     if args.collect:
