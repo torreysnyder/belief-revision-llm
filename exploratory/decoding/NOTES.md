@@ -94,3 +94,21 @@ Motivation: the evaluator scores the transcript text, so decoding its scores fro
 Differences from the collaborator's write-up: Llama-3.1-8B (32 layers, d=4096) instead of Qwen2.5-7B; one vignette with many conversations rather than 10 claims split train/val/test by claim, so folds hold out conversations (or cells with `--group-by cell`); within one vignette dE is E shifted by a constant, so baseline subtraction does not change decoding (it will once vignettes are pooled; the paper also centers h on the baseline hidden state, which matters for the same reason). The dialogue-position analogue of their final `<|im_end|>` is our `reply_eot`.
 
 `decode.py --labels endorsement` uses the probe targets (`<claim>_dE`, `_dEA`, `_dEB`, `_dU`, `_dqW`) with the same analyses and baselines, including the TF-IDF text baseline (still needed: the probe is a different readout, but text could still predict it). Feature sets can include `probe:<claim>:<mapping>` (the probe's own Answer-token state, a positive control).
+
+### Probe self-decoding on partial data (2026-10-29)
+
+The first probe runs finished 407 of 864 conversations; the rest failed with NDIF GPU out-of-memory errors from a crowded shared GPU (two fixes along the way: `--batch-size`, default 4, and forced UTF-8 stdout because NDIF status symbols crashed redirected output on Windows; launch from a separate terminal with `cmd /c "... > log 2>&1"`, since Claude Code background jobs get stopped under memory pressure). Finished cells are only terse_anxious low/mixed, reflective_informal low/mixed and skeptical_rambling low, so the main dialogue-state decoding waits for the rerun.
+
+As a partial replication of the collaborator's result, `decode.py --labels endorsement` decoded probe scores from the probe's own `Answer:` hidden state (`decoding/probe_selfdecode_partial.csv`, layers 0,4,...,28,31, conversation-grouped folds). Pooled R2 for dE (mean of the two A/B orders):
+
+| target | own-claim probe state L0 / L12 / L16+ | other-claim probe states L16+ | text all_text | phase mean |
+|---|---|---|---|---|
+| core | 0.70 / 0.95 / 0.99 | 0.89-0.91 | 0.75 | 0.40 |
+| A1 | 0.45 / 0.86 / 0.97 | 0.72-0.78 | 0.44 | 0.19 |
+| A2 | 0.74 / 0.94 / 0.99 | 0.85-0.90 | 0.75 | 0.30 |
+
+- Replicates: the probe score is linearly readable from its own state by about L12-16 (R2 0.95-0.99); final-layer near 1 is expected since the answer is read out of it.
+- Up to about L8 every probe position gives the same R2: generic context, roughly text level. Claim-specific information appears from L12, where the own-claim state pulls ahead.
+- Other-claim states (e.g. the A1 probe predicting core dE at 0.90) beat text (0.75); part of this may be correlation between the claims' scores.
+- Both A/B orders give the same results. Probe scores are much more predictable (text 0.75 for core) than evaluator scores (text 0.31), which is either less noise or a simpler signal.
+- Shuffle ceilings are high (0.36-0.41) because shuffles are within checkpoint and the phase mean already explains much variance.
