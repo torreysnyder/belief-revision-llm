@@ -13,7 +13,7 @@ group whole conversations together.  This is a scale diagnostic, not the final
 analysis: it does not include the baselines in NOTES.md.
 
 Usage:
-  python exploratory/decoding/check_scale.py --run runs/NAME --position prompt_end --target belief_core
+  python -m belief_revision.extensions.kati.decoding.check_scale --run runs/NAME --position prompt_end --target belief_core
 Needs <run>/activations/*.pt (extract_activations.py) and <run>/labels.csv (make_labels.py).
 """
 

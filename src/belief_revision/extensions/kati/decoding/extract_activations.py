@@ -24,9 +24,9 @@ model.model.layers[l]), matching llm.py.  Output, per conversation:
     layers, positions, model_name, n_tokens
 
 Usage:
-  python exploratory/decoding/extract_activations.py --run runs/NAME --dry-run
-  python exploratory/decoding/extract_activations.py --run runs/NAME --limit 1
-  python exploratory/decoding/extract_activations.py --run runs/NAME
+  python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME --dry-run
+  python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME --limit 1
+  python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME
 """
 
 import json

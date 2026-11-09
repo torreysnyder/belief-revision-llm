@@ -211,6 +211,20 @@ uv run python scripts/run_experiment.py \
 Add `--reporting true` to exercise the Supabase reporting path after the
 required Supabase values are configured in `.env`.
 
+Kati's standalone decoding and endorsement-probe tools live under
+`src/belief_revision/extensions/kati/`. See the
+[decoding notes](src/belief_revision/extensions/kati/decoding/NOTES.md) for
+commands and the [results summary](src/belief_revision/extensions/kati/results_summary/RESULTS_SUMMARY.md)
+for preliminary findings and figures. For example, build labels for a saved run:
+
+```bash
+uv run python -m belief_revision.extensions.kati.decoding.make_labels --run runs/NAME
+```
+
+These are post-hoc research tools, without a registered live conversation
+adapter. Reproducing the analyses requires the saved run data and the original
+Llama model and prompt configuration.
+
 ## Run the analysis
 
 After generating the results CSV:
@@ -241,9 +255,11 @@ uv run ruff format --check .
 ```
 
 The pytest configuration enforces 100% statement and branch coverage across
-the migrated `src/belief_revision/` package and operational `scripts/`. Unit
-tests mock NDIF and Supabase integrations, so the suite does not submit paid
-inference jobs or modify live reporting data.
+the migrated `src/belief_revision/` package and operational `scripts/`, with
+explicit omissions for the walkthrough and Kati's standalone research drafts.
+The drafts retain their previous coverage scope after relocation. Unit tests
+mock NDIF and Supabase integrations, so the suite does not submit paid inference
+jobs or modify live reporting data.
 
 ## NDIF setup
 

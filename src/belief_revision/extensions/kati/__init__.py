@@ -1,1 +1,1 @@
-"""Kati's belief-revision experiment extensions."""
+"""Kati's research on belief decoding and endorsement probes."""

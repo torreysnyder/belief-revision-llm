@@ -42,10 +42,10 @@ Output in <run>/endorsement/:
   scores.csv                  (--collect) one row per probe with E, U, q*, and changes from baseline
 
 Usage:
-  python exploratory/decoding/endorsement_probe.py --run runs/NAME --dry-run
-  python exploratory/decoding/endorsement_probe.py --run runs/NAME --limit 1
-  python exploratory/decoding/endorsement_probe.py --run runs/NAME
-  python exploratory/decoding/endorsement_probe.py --run runs/NAME --collect
+  python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/NAME --dry-run
+  python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/NAME --limit 1
+  python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/NAME
+  python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/NAME --collect
 """
 
 import sys
@@ -55,9 +55,9 @@ import pandas as pd
 import argparse
 from belief_revision.core.conversation import make_target_system_prompt
 from belief_revision.core.defaults import TARGET_MODEL
+from belief_revision.extensions.kati.decoding.extract_activations import build_messages, checkpoint_turns
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
-from extract_activations import build_messages, checkpoint_turns
 from nnsight import save as nnsight_save
 from pathlib import Path
 

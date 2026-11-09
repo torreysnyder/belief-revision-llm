@@ -34,10 +34,10 @@ comparison fair).  Folds hold out whole conversations (or whole cells with
 --group-by cell).  Needs only numpy/pandas.
 
 Usage:
-  python exploratory/decoding/decode.py --run runs/NAME --text-only
-  python exploratory/decoding/decode.py --run runs/NAME --positions prompt_end,reply_last
-  python exploratory/decoding/decode.py --run runs/NAME --positions prompt_end --layers 14 --out-name test
-  python exploratory/decoding/decode.py --run runs/NAME --labels endorsement --positions prompt_end,reply_eot,probe:core:A_endorse --out-name endorsement
+  python -m belief_revision.extensions.kati.decoding.decode --run runs/NAME --text-only
+  python -m belief_revision.extensions.kati.decoding.decode --run runs/NAME --positions prompt_end,reply_last
+  python -m belief_revision.extensions.kati.decoding.decode --run runs/NAME --positions prompt_end --layers 14 --out-name test
+  python -m belief_revision.extensions.kati.decoding.decode --run runs/NAME --labels endorsement --positions prompt_end,reply_eot,probe:core:A_endorse --out-name endorsement
 Writes <run>/decoding/<out-name>.csv (default name: results).
 """
 
@@ -47,8 +47,8 @@ import numpy as np
 import torch
 import pandas as pd
 import argparse
-from check_scale import load_samples
-from extract_activations import checkpoint_turns
+from belief_revision.extensions.kati.decoding.check_scale import load_samples
+from belief_revision.extensions.kati.decoding.extract_activations import checkpoint_turns
 from pathlib import Path
 
 PHASES = ["intro", "core_challenge_1", "core_challenge_2", "closing"]

@@ -7,8 +7,8 @@ Reads existing outputs only; nothing is re-run:
   runs/politics03-llama8b-full/endorsement/scores.csv  endorsement probe scores
 
 Usage (from the repo root):
-  uv run --no-sync python exploratory/results_summary/make_figures.py
-Writes PNGs to exploratory/results_summary/figures/ and prints the markdown tables.
+  uv run --no-sync python -m belief_revision.extensions.kati.results_summary.make_figures
+Writes PNGs to src/belief_revision/extensions/kati/results_summary/figures/ and prints the markdown tables.
 """
 
 import numpy as np
@@ -19,7 +19,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# Source checkout data remains at the repository root; installed copies use the working directory.
+ROOT = next((directory for directory in Path(__file__).resolve().parents if (directory / "pyproject.toml").is_file()), Path.cwd())
 EARLY = ROOT / "output_full_crossed" / "paper_v3"
 RUN = ROOT / "runs" / "politics03-llama8b-full"
 FIGURES = Path(__file__).resolve().parent / "figures"

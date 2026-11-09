@@ -5,7 +5,7 @@ labels the evaluator saw back to CANONICAL ones (A1 = methodological,
 A2 = contextual), because aux_order_condition="reversed" swaps which auxiliary
 is shown as A1.  Without this the aux decoders mix two different beliefs.
 
-Usage: python exploratory/decoding/make_labels.py --run runs/NAME
+Usage: python -m belief_revision.extensions.kati.decoding.make_labels --run runs/NAME
 """
 
 import pandas as pd

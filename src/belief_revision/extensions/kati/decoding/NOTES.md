@@ -27,17 +27,17 @@ Teacher-forced and post-hoc rather than captured during generation:
 
 Usage (from the repo root, `PYTHONUTF8=1`):
 ```
-uv run --no-sync python exploratory/decoding/extract_activations.py --run runs/NAME --dry-run
-uv run --no-sync python exploratory/decoding/extract_activations.py --run runs/NAME --limit 1 --layers 0,15,31
-uv run --no-sync python exploratory/decoding/extract_activations.py --run runs/NAME
-uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     # writes labels.csv
+uv run --no-sync python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME --dry-run
+uv run --no-sync python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME --limit 1 --layers 0,15,31
+uv run --no-sync python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME
+uv run --no-sync python -m belief_revision.extensions.kati.decoding.make_labels --run runs/NAME     # writes labels.csv
 ```
 
 ## Things found while building it
 - **Double BOS.** The run pipeline renders the chat template to text (which starts with `<|begin_of_text|>`) and then the tokenizer adds another BOS, so every prompt starts `[128000, 128000, ...]`. Extraction mirrors this exactly so positions and activations match the live runs. Probably harmless, but worth telling Jason & Tris.
 - **Auxiliary labels are in display order.** With `aux_order_condition="reversed"`, the evaluator's `belief_A1` is the *contextual* auxiliary. `make_labels.py` maps back to canonical (A1 = methodological, A2 = contextual) via `canonical_to_display_A1/A2`. Not yet verified against the probe prompt template wording.
 - The stored assistant text is `.strip()`ped, so `reply_*` positions are on re-tokenized text, not the originally generated token ids.
-- `scripts/` is under the 100% coverage gate, so this work lives in `exploratory/decoding/` (not under that gate). Ruff-clean.
+- These draft tools now live under `src/belief_revision/extensions/kati/decoding/`. The six research scripts remain outside the production coverage gate through explicit omissions; focused relocation and core-integration tests are separate. Their exploratory status is unchanged.
 
 ## Controls and pitfalls to build into the analysis
 - **Label is the evaluator's reading of the text**, not the model's state. Baselines: layer 0/embedding decoding and a text-embedding decoder. Only interpret layers that beat them.
@@ -58,7 +58,7 @@ uv run --no-sync python exploratory/decoding/make_labels.py --run runs/NAME     
 - 2026-10-28: `decode.py` written. Targets for core/A1/A2: score, absdev (|score-50|), endorse (>50 vs <50, exact 50 dropped, scored by AUC). Analyses: pooled model (overall and per test checkpoint), within-checkpoint, cross-checkpoint transfer, shuffle ceiling (max over 10 within-checkpoint shuffles), phase-mean and cell-mean baselines, TF-IDF text baselines (all text / assistant turns / last reply). Output `<run>/decoding/<out-name>.csv` (long format: feature_set, analysis, train, test, target, metric, value, r, multiplier, null_max, n_test, n_pos).
 - Text baseline result (`decoding/text_test.csv`, pooled, held-out conversations; all-text TF-IDF): core score R2 0.31, core absdev 0.20, core endorse AUC 0.91; A1 score 0.41, absdev 0.36, endorse 0.82; A2 score 0.13, absdev 0.09, endorse 0.66. Phase-mean baseline about 0.00-0.04 R2. Last-reply-only text is much weaker (core score 0.11). **Text beats the activation decoders for core score (0.31 vs 0.28), so interpret activation layers only where they beat text.**
 - Class balance: core endorse is very imbalanced (5.9% of scores > 50; 199 positives of 3,388; about 3.6% at intro; 6.3% of core scores are exactly 50). A1 69% and A2 59% of scores > 50, but 16% and 22% are exactly 50. Core-endorse results, especially within a checkpoint, rest on few positives.
-- 2026-10-28: full `decode.py` run finished: `runs/politics03-llama8b-full/decoding/results.csv` (12,681 rows, 69 feature sets: 32 layers x 2 positions + 3 text variants + 2 baselines). Rerun: `uv run --no-sync python exploratory/decoding/decode.py --run runs/politics03-llama8b-full --out-name results` (about 40 min).
+- 2026-10-28: full `decode.py` run finished: `runs/politics03-llama8b-full/decoding/results.csv` (12,681 rows, 69 feature sets: 32 layers x 2 positions + 3 text variants + 2 baselines). Rerun: `uv run --no-sync python -m belief_revision.extensions.kati.decoding.decode --run runs/politics03-llama8b-full --out-name results` (about 40 min).
 - **Main result: text TF-IDF is at least as good as the activations on every target.** Best layer, pooled, held-out conversations (prompt_end / reply_last / text all-turns / shuffle ceiling): core score R2 0.279 (L14) / 0.273 (L30) / 0.307 / 0.03; core absdev 0.166 / 0.153 / 0.197 / 0.02; core endorse AUC 0.887 / 0.875 / 0.905 / 0.63; A1 score 0.293 (L1) / 0.283 / 0.406 / 0.04; A1 absdev 0.287 / 0.263 / 0.362; A1 endorse 0.778 / 0.770 / 0.816 / 0.61; A2 score 0.055 / 0.039 / 0.125 / 0.01; A2 absdev 0.035 / 0.020 / 0.085; A2 endorse 0.603 / 0.588 / 0.657 / 0.58 (about chance). Phase-mean baseline is near chance.
 - Layer profiles are flat; A1 and A2 are best at layers 0-2 (surface text), core at layers 9-14 (prompt_end) and 30-31 (reply_last). prompt_end is slightly better or equal to reply_last. absdev behaves like score with lower R2.
 - Within checkpoint, core score R2 (best layer) is 0.17-0.27 from activations vs 0.25 (intro) to 0.36 (closing) from text. Intro is where activations come closest.

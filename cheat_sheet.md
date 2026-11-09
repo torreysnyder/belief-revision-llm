@@ -193,9 +193,10 @@ uv run pytest
 ```
 
 The project requires 100% statement and branch coverage for the migrated
-`src/belief_revision/` package and operational `scripts/`. Remote model and
-Supabase calls are mocked in the unit suite, so this command does not consume
-inference credits or write live data.
+`src/belief_revision/` package and operational `scripts/`, excluding the
+walkthrough and the explicitly listed standalone Kati research drafts. Remote
+model and Supabase calls are mocked in the unit suite, so this command does not
+consume inference credits or write live data.
 
 ## Check Torrey's pair pipeline without model calls
 

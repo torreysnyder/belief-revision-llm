@@ -47,7 +47,16 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["belief_revision", "scripts"]
-omit = ["src/belief_revision/demo/*"]
+# These standalone research drafts were outside coverage before relocation.
+omit = [
+    "src/belief_revision/demo/*",
+    "src/belief_revision/extensions/kati/decoding/check_scale.py",
+    "src/belief_revision/extensions/kati/decoding/decode.py",
+    "src/belief_revision/extensions/kati/decoding/endorsement_probe.py",
+    "src/belief_revision/extensions/kati/decoding/extract_activations.py",
+    "src/belief_revision/extensions/kati/decoding/make_labels.py",
+    "src/belief_revision/extensions/kati/results_summary/make_figures.py",
+]
 
 [tool.coverage.report]
 fail_under = 100
