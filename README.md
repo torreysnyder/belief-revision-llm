@@ -177,9 +177,93 @@ require the Postgres connection string.
 
 ### Research extensions
 
-The base command runs the vanilla experiment. Load a registered researcher
-extension with a repeatable `--extension` flag. Torrey's activation-capture
-adapter has a checked-in YAML configuration:
+Run these commands from the repository root after `uv sync`, except where a
+`cd` is shown. Registered live adapters use the repeatable `--extension` flag;
+Q's notebook and Kati's analysis tools run separately.
+
+Before model-backed work, check the global settings in
+[`src/belief_revision/core/defaults.py`](src/belief_revision/core/defaults.py):
+`TARGET_MODEL`, `USER_SIM_MODEL`, and evaluator provider/model. They currently
+select Qwen2.5-14B-Instruct, Llama-3.1-8B-Instruct, and OpenRouter
+`openai/gpt-4.1-mini`. Update settings to match the experiment being reproduced;
+model identities, layer counts, prompts, and checkpoint definitions must agree
+with saved data. Runner YAML profiles configure evaluation and extension capture;
+they do not override the target or simulated-user model. Standalone tools use
+the globals, notebook settings, or saved metadata described below.
+
+#### Q / Qingqing: endorsement-score validation
+
+1. Open [`test_endorse_probe.ipynb`](src/belief_revision/extensions/qingqing/endorsement_validation/test_endorse_probe.ipynb)
+   in Google Colab and select a CUDA GPU runtime.
+2. Follow its dependency-install and runtime-restart instructions. In the
+   configuration cell, review `MODEL_ID`, `PRECISION`, `USE_DRIVE`, `DATA_PATH`,
+   and `OUTPUT_ROOT`. The notebook uses its own model setting, currently
+   `Qwen/Qwen2.5-7B-Instruct` with `4bit` precision; changing repository globals
+   does not change it. Its shape checks assume the original 28-layer, 3584-wide model.
+3. Run the remaining cells in order. With `DATA_PATH = ""` and
+   `LOAD_FROM_OSF = True`, it downloads the conversation CSV from OSF node
+   `hs867`. Set `DATA_PATH` to use another supported CSV/JSON/JSONL input.
+   With `USE_DRIVE = True`, authorize the Drive mount to persist outputs.
+
+The notebook loads the model on the Colab GPU and performs extraction and
+validation; it does not run the shared user simulator or API evaluator. Existing
+results are under
+[`endorsement_validation/extractions/`](src/belief_revision/extensions/qingqing/endorsement_validation/extractions/).
+There is no registered `--extension` adapter or script CLI for this notebook.
+
+#### Kati: belief decoding and endorsement probes
+
+Kati's standalone tools live under `src/belief_revision/extensions/kati/`.
+Use the original saved run directory; run data and activation tensors are not
+included with the scripts. Reanalysis of saved outputs does not call a model:
+
+```bash
+uv run python -m belief_revision.extensions.kati.decoding.make_labels --run runs/politics03-llama8b-full
+uv run python -m belief_revision.extensions.kati.decoding.check_scale --run runs/politics03-llama8b-full --position prompt_end
+uv run python -m belief_revision.extensions.kati.decoding.decode --run runs/politics03-llama8b-full --out-name rerun
+```
+
+`make_labels` reads `results.csv`; the scale check and decoder also need the saved
+`activations/` tensors. The decoder uses `dialogues.jsonl` for its text baseline
+and writes `decoding/rerun.csv`.
+
+To create missing activations or endorsement measurements, first match the
+original `meta-llama/Llama-3.1-8B-Instruct` target, prompts, and phases in the
+shared core settings. The current global Qwen target is different. These scripts
+import `TARGET_MODEL` directly and have no `--model` or `--config` override.
+With NDIF/Hugging Face access configured, these commands make model requests:
+
+```bash
+uv run python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/politics03-llama8b-full
+uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --batch-size 4
+```
+
+Existing `.pt` files are skipped by filename; changing the global target alone
+does not regenerate them. Use a separate run/output directory for changed model
+or extraction settings. `--dry-run` avoids NDIF execution but may download
+the tokenizer. Collect saved endorsement tensors and analyze them without new
+inference:
+
+```bash
+uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --collect
+uv run python -m belief_revision.extensions.kati.decoding.decode --run runs/politics03-llama8b-full --labels endorsement --out-name endorsement-rerun
+uv run python -m belief_revision.extensions.kati.results_summary.make_figures
+```
+
+Figure regeneration additionally requires the original early summary CSVs under
+`output_full_crossed/paper_v3/` and the named decoding CSVs `results.csv` and
+`probe_selfdecode_partial.csv` under the saved run's `decoding/` directory.
+See the [decoding notes](src/belief_revision/extensions/kati/decoding/NOTES.md)
+and [preliminary results summary](src/belief_revision/extensions/kati/results_summary/RESULTS_SUMMARY.md).
+Check the package-to-core integration offline with
+`uv run pytest tests/test_kati_research_integration.py --no-cov`; use `uv run pytest`
+for the full suite. These remain standalone post-hoc tools without a registered
+live conversation adapter.
+
+#### Torrey: CAA capture and steering
+
+For activation capture during the shared experiment, review
+[`configs/torrey-caa.yaml`](configs/torrey-caa.yaml), then run:
 
 ```bash
 uv run python scripts/run_experiment.py \
@@ -188,18 +272,46 @@ uv run python scripts/run_experiment.py \
   --config configs/torrey-caa.yaml
 ```
 
-Add `--reporting true` to upload the completed conversation and its activation
-artifact. Extension hooks execute in the order supplied on the command line.
-Torrey's defaults capture the configured turns and layers into
-`activation_steering_pipeline/activations/live_captures/`; that generated
-directory is ignored by Git.
+This runs live conversation generation and the configured evaluator, capturing
+the selected turns/layers into `activation_steering_pipeline/activations/live_captures/`.
+Add `--reporting true` to upload completed records and activation artifacts.
+Hooks run in the order supplied on the command line.
 
-A fully commented walkthrough of the extension interface is registered as
-`jasons-exp` and implemented in
+For the standalone pipeline, use its directory so relative data paths agree.
+Choose an unused `--run-name` for a fresh run; an existing name resumes outputs
+and may include previously saved judgments:
+
+```bash
+cd activation_steering_pipeline
+uv run python generate_caa_contrastive_pairs.py --input data/pilot_original.jsonl --out-dir data
+uv run python extract_caa_activations.py
+uv run python build_caa_vectors.py
+uv run python activation_steering.py --stages generate summarize --run-name development-no-judge
+cd ..
+```
+
+These steps require the original pilot records and their cache/metadata. Pair
+generation uses NDIF through the core; standalone extraction and steering load
+models locally and require suitable GPU memory. For gated models, export
+`HF_TOKEN` in the shell or use an existing Hugging Face login; these two scripts
+do not load `.env`. Match the model before running: the checked-in pair manifest records
+`Qwen/Qwen2.5-0.5B-Instruct`, unlike the current shared 14B target. The generator
+uses global `TARGET_MODEL` and its `--tokenizer` setting, extraction reads pair
+metadata (or `--model`), and steering reads vector metadata.
+
+The final command deliberately runs generation and summary only. The standalone
+judge stage still imports the unavailable `belief_revision_experiment_qwen`
+module in `activation_steering.py`; the default full pipeline is blocked there,
+and this command produces no fresh judge-based belief scores. See the
+[pipeline notes](activation_steering_pipeline/README_controlled_counterfactual_CAA.md)
+for individual stages and an offline pair-building smoke check.
+
+#### Extension walkthrough
+
+The `jasons-exp` walkthrough is implemented in
 [`src/belief_revision/demo/jasons_exp.py`](src/belief_revision/demo/jasons_exp.py).
-It demonstrates every conversation lifecycle hook, selective or all-layer
-activation capture, researcher-owned artifacts, optional artifact reporting,
-and read-only Supabase access. Run it with:
+It demonstrates conversation lifecycle hooks, activation capture,
+researcher-owned artifacts, optional reporting, and read-only Supabase access:
 
 ```bash
 uv run python scripts/run_experiment.py \
@@ -208,22 +320,7 @@ uv run python scripts/run_experiment.py \
   --config configs/default.yaml
 ```
 
-Add `--reporting true` to exercise the Supabase reporting path after the
-required Supabase values are configured in `.env`.
-
-Kati's standalone decoding and endorsement-probe tools live under
-`src/belief_revision/extensions/kati/`. See the
-[decoding notes](src/belief_revision/extensions/kati/decoding/NOTES.md) for
-commands and the [results summary](src/belief_revision/extensions/kati/results_summary/RESULTS_SUMMARY.md)
-for preliminary findings and figures. For example, build labels for a saved run:
-
-```bash
-uv run python -m belief_revision.extensions.kati.decoding.make_labels --run runs/NAME
-```
-
-These are post-hoc research tools, without a registered live conversation
-adapter. Reproducing the analyses requires the saved run data and the original
-Llama model and prompt configuration.
+Add `--reporting true` after configuring the required Supabase values in `.env`.
 
 ## Run the analysis
 
