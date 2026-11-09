@@ -57,6 +57,7 @@ import concurrent.futures
 from belief_revision.core.conversation import make_target_system_prompt
 from belief_revision.core.defaults import PHASES, TARGET_MODEL, USER_SIM_MODEL
 from belief_revision.core.llm import call_model as call_core_model
+from belief_revision.core.model_profiles import default_target_profile, load_target_profile, prepare_profile_messages
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -709,13 +710,13 @@ def run_rewrites(states, substitutes, control_types, out_dir, model, workers, of
 # ---------------------------------------------------------------------------
 # 4. pairs, prompt rendering, QC
 # ---------------------------------------------------------------------------
-def load_tokenizer(name, enabled):
+def load_tokenizer(name, enabled, revision=None):
     if not enabled:
         return None, None
     try:
         from transformers import AutoTokenizer
 
-        tok = AutoTokenizer.from_pretrained(name)
+        tok = AutoTokenizer.from_pretrained(name, revision=revision)
         revision = getattr(tok, "init_kwargs", {}).get("_commit_hash") or getattr(tok, "_commit_hash", None)
         return tok, revision
     except Exception as e:
@@ -723,9 +724,11 @@ def load_tokenizer(name, enabled):
         return None, None
 
 
-def render(tokenizer, messages):
+def render(tokenizer, messages, profile=None):
     if tokenizer is None:
         return None
+    if profile is not None:
+        messages = prepare_profile_messages(messages, profile)
     return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 
@@ -770,7 +773,7 @@ REQUIRED_FIELDS = [
 ]
 
 
-def build_pair(state, ct, sub, rw, tokenizer):
+def build_pair(state, ct, sub, rw, tokenizer, profile=None):
     control_prompt = state["experimental_prompt"][:-1] + [{"role": "user", "content": rw["control_text"]}]
     vignette_aux = [{"id": "A1", "text": state["display_A1_text"]}, {"id": "A2", "text": state["display_A2_text"]}]
     aux_exp = _aux_invoked(state["experimental_text"], vignette_aux)
@@ -786,8 +789,8 @@ def build_pair(state, ct, sub, rw, tokenizer):
             "control_evidence_hand_edited": sub.get("hand_edited", False),
             "control_text": rw["control_text"],
             "control_prompt": control_prompt,
-            "experimental_prompt_rendered": render(tokenizer, state["experimental_prompt"]),
-            "control_prompt_rendered": render(tokenizer, control_prompt),
+            "experimental_prompt_rendered": render(tokenizer, state["experimental_prompt"], profile),
+            "control_prompt_rendered": render(tokenizer, control_prompt, profile),
             "experimental_word_count": word_count(state["experimental_text"]),
             "control_word_count": word_count(rw["control_text"]),
             "length_ratio": rw.get("length_ratio"),
@@ -943,6 +946,28 @@ def write_manual_review_sample(pairs, path, per_stratum, seed):
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+def select_target_profile(config_path=None, target_model=None, tokenizer=None):
+    """Keep target identity and prompt tokenizer aligned without editing globals."""
+
+    if config_path:
+        profile = load_target_profile(config_path, model_id=target_model)
+    else:
+        profile = default_target_profile(target_model or tokenizer or TARGET_MODEL)
+    if tokenizer is not None and tokenizer != profile.model_id:
+        raise ValueError("--tokenizer must match the selected target model; use a matching model profile")
+    return profile
+
+
+def validate_pair_profile(manifest, profile):
+    """Do not replace frozen pair metadata with another target's identity."""
+
+    if manifest.get("target_model") != profile.model_id:
+        raise ValueError("pair output directory belongs to another target; use a new --out-dir")
+    previous = manifest.get("target_profile")
+    if previous is not None and previous != profile.to_dict():
+        raise ValueError("pair target profile changed; use a new --out-dir")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Generate controlled counterfactual CAA contrastive pairs from the pilot JSONL.")
     ap.add_argument("--input", default=DEFAULT_INPUT)
@@ -953,12 +978,20 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--budget", type=int, default=DAILY_CALL_BUDGET, help="max API calls this run")
     ap.add_argument("--offline", action="store_true", help="make no API calls; build pairs from caches only")
-    ap.add_argument("--tokenizer", default=TARGET_MODEL)
+    ap.add_argument("--model-config", default=None, help="Target model profile YAML; does not change the rewrite/user model.")
+    ap.add_argument("--target-model", default=None, help="Target ID when no profile YAML is supplied.")
+    ap.add_argument("--tokenizer", default=None, help="Legacy target/tokenizer ID; must match the selected profile.")
     ap.add_argument("--no-render", action="store_true", help="skip rendering prompts with the Qwen chat template")
     ap.add_argument("--review-per-stratum", type=int, default=2)
     ap.add_argument("--seed", type=int, default=12345)
     args = ap.parse_args()
 
+    profile = select_target_profile(args.model_config, args.target_model, args.tokenizer)
+    args.tokenizer = profile.model_id
+    previous_manifest = os.path.join(args.out_dir, "caa_pairs_manifest.json")
+    if os.path.exists(previous_manifest):
+        with open(previous_manifest, encoding="utf-8") as file:
+            validate_pair_profile(json.load(file), profile)
     os.makedirs(args.out_dir, exist_ok=True)
     set_call_budget(args.budget)
 
@@ -981,7 +1014,7 @@ def main():
     substitutes, sub_path = load_or_create_substitutes(states, args.control_types, conversations, args.out_dir, args.rewrite_model, args.offline)
     rewrites = run_rewrites(states, substitutes, args.control_types, args.out_dir, args.rewrite_model, args.workers, args.offline)
 
-    tokenizer, tok_revision = load_tokenizer(args.tokenizer, not args.no_render)
+    tokenizer, tok_revision = load_tokenizer(args.tokenizer, not args.no_render, profile.revision)
 
     pairs, missing = [], []
     for s in states:
@@ -991,7 +1024,7 @@ def main():
             if sub is None or rw is None:
                 missing.append(f"{s['source_state_id']}__{ct}")
                 continue
-            pairs.append(build_pair(s, ct, sub, rw, tokenizer))
+            pairs.append(build_pair(s, ct, sub, rw, tokenizer, profile))
     apply_qc(pairs)
 
     core_pairs = [p for p in pairs if p["contrast_type"] == "core"]
@@ -1018,7 +1051,9 @@ def main():
         "source_sha256": source_sha,
         "rewrite_model": args.rewrite_model,
         "rewrite_temperature": REWRITE_TEMPERATURE,
-        "target_model": TARGET_MODEL,
+        "target_model": profile.model_id,
+        "target_profile": profile.to_dict(),
+        "target_profile_fingerprint": profile.fingerprint,
         "tokenizer": args.tokenizer if tokenizer is not None else None,
         "tokenizer_revision": tok_revision,
         "target_system_prompt_sha256": sha256_text(make_target_system_prompt()),

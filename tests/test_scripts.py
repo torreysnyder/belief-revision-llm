@@ -129,7 +129,8 @@ def test_run_experiment_argument_parsing(monkeypatch):
     assert args.evaluator_mode == "disabled"
 
 
-def test_run_experiment_main_modes(monkeypatch):
+def test_run_experiment_main_modes(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     calls = []
     resolution_calls = []
     first_factory = object()
@@ -421,12 +422,14 @@ def test_invalid_extension_configs_fail(tmp_path, document, message):
         )
 
 
-def test_script_main_guards(monkeypatch):
+def test_script_main_guards(monkeypatch, tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["run_experiment.py", "--single-run"])
     monkeypatch.setattr("belief_revision.persistence.load_vignettes", lambda path: [])
     monkeypatch.setattr("belief_revision.core.runner.run_experiment", lambda **kwargs: 0)
-    runpy.run_path("scripts/run_experiment.py", run_name="__main__")
+    runpy.run_path(str(repo_root / "scripts/run_experiment.py"), run_name="__main__")
 
     empty_client = SelectClient({table: SelectQuery(pages=[[]], count=0) for table in analyze_reporting.TABLES.values()})
     monkeypatch.setattr("belief_revision.persistence.create_reporting_client", lambda: empty_client)
-    runpy.run_path("scripts/analyze_reporting.py", run_name="__main__")
+    runpy.run_path(str(repo_root / "scripts/analyze_reporting.py"), run_name="__main__")

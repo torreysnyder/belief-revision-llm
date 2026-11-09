@@ -1,5 +1,6 @@
 """Run the migrated belief-revision experiment."""
 
+import json
 import yaml
 import argparse
 from belief_revision.core.defaults import (
@@ -9,8 +10,10 @@ from belief_revision.core.defaults import (
     MAX_WORKERS,
     REPLICATES_PER_PRIMARY_CELL,
     TARGET_MODEL,
+    USER_SIM_MODEL,
 )
 from belief_revision.core.llm import API_PROVIDERS
+from belief_revision.core.model_profiles import TargetModelProfile, load_target_profile
 from belief_revision.core.runner import run_experiment
 from belief_revision.extensions import resolve_extension_factories
 from belief_revision.extensions.torrey import DEFAULT_OUTPUT_DIR
@@ -21,21 +24,21 @@ from pathlib import Path
 RUNS_DIR = Path("runs")
 
 
-def default_run_name(single_run: bool) -> str:
+def default_run_name(single_run: bool, target_model: str = TARGET_MODEL) -> str:
     """Name a run by UTC start time and target model so runs sort and compare."""
 
     started = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    name = f"{started}_{TARGET_MODEL.split('/')[-1].lower()}"
+    name = f"{started}_{target_model.split('/')[-1].lower()}"
     return f"{name}_single" if single_run else name
 
 
-def resolve_output_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+def resolve_output_paths(args: argparse.Namespace, target_model: str = TARGET_MODEL) -> tuple[Path, Path]:
     """Return CSV and JSONL paths, giving each run its own folder by default."""
 
     if args.csv_output is not None and args.jsonl_output is not None:
         return args.csv_output, args.jsonl_output
 
-    run_name = args.run_name or default_run_name(args.single_run)
+    run_name = args.run_name or default_run_name(args.single_run, target_model)
     if Path(run_name).name != run_name or run_name in {".", ".."}:
         raise ValueError("run name must not contain path separators")
     run_dir = RUNS_DIR / run_name
@@ -101,6 +104,63 @@ def extension_configuration(document: dict[str, object]) -> dict[str, object]:
     if not isinstance(extensions, dict):
         raise ValueError("config 'extensions' must be a mapping")
     return extensions
+
+
+def target_configuration(args: argparse.Namespace, document: dict[str, object]) -> TargetModelProfile:
+    """Resolve one target profile with CLI choices taking precedence over YAML."""
+
+    unknown_root = set(document) - {"target", "evaluator", "extensions"}
+    if unknown_root:
+        raise ValueError("unknown run config field(s): " + ", ".join(sorted(map(str, unknown_root))))
+    target = document.get("target", {})
+    if not isinstance(target, dict):
+        raise ValueError("config 'target' must be a mapping")
+    unknown = set(target) - {"model_config", "model_id"}
+    if unknown:
+        raise ValueError("unknown target config field(s): " + ", ".join(sorted(map(str, unknown))))
+    if target.get("model_config") is not None and target.get("model_id") is not None:
+        raise ValueError("choose target.model_config or target.model_id, not both")
+
+    profile_path = getattr(args, "model_config", None)
+    model_id = getattr(args, "target_model", None)
+    if profile_path is not None and model_id is not None:
+        raise ValueError("choose --model-config or --target-model, not both")
+    if profile_path is None and model_id is None:
+        profile_path, model_id = target.get("model_config"), target.get("model_id")
+        if profile_path is not None:
+            if not isinstance(profile_path, str) or not profile_path.strip():
+                raise ValueError("target.model_config must be a nonempty path string")
+            profile_path = Path(profile_path)
+            if not profile_path.is_absolute() and args.config is not None:
+                profile_path = args.config.parent / profile_path
+    if model_id is not None and (not isinstance(model_id, str) or not model_id.strip()):
+        raise ValueError("target model_id must be a nonempty string")
+    return load_target_profile(profile_path, model_id=model_id)
+
+
+def write_run_manifest(
+    args: argparse.Namespace,
+    csv_path: Path,
+    jsonl_path: Path,
+    profile: TargetModelProfile,
+    evaluator: dict[str, object],
+) -> Path:
+    """Persist the resolved requested configuration beside the local run output."""
+
+    explicit_paths = args.csv_output is not None or args.jsonl_output is not None
+    manifest_path = csv_path.with_name(f"{csv_path.stem}.run_manifest.json") if explicit_paths else csv_path.parent / "run_manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "schema_version": 1,
+        "target_model": profile.model_id,
+        "target_profile": profile.to_dict(),
+        "target_profile_fingerprint": profile.fingerprint,
+        "user_sim_model": USER_SIM_MODEL,
+        "evaluator": evaluator,
+        "outputs": {"csv": str(csv_path), "jsonl": str(jsonl_path)},
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
 
 
 def evaluator_configuration(
@@ -195,8 +255,11 @@ def parse_args() -> argparse.Namespace:
         "--config",
         type=Path,
         default=None,
-        help="Load extension settings from a YAML file.",
+        help="Load target, evaluator, and extension settings from a YAML file.",
     )
+    target_options = parser.add_mutually_exclusive_group()
+    target_options.add_argument("--model-config", type=Path, help="Select a target-model profile YAML without changing global defaults.")
+    target_options.add_argument("--target-model", help="Select a target model ID using compatibility defaults; custom layouts need --model-config.")
     parser.add_argument(
         "--vignettes",
         type=Path,
@@ -301,13 +364,15 @@ def main() -> None:
 
     try:
         config = load_config(args.config)
+        selected_target = target_configuration(args, config)
         selected_evaluator = evaluator_configuration(args, config)
         extension_factories = resolve_extension_factories(
             args.extension,
             configurations={"torrey-caa": torrey_caa_configuration(args, extension_configuration(config))},
         )
-        csv_path, jsonl_path = resolve_output_paths(args)
-    except ValueError as error:
+        csv_path, jsonl_path = resolve_output_paths(args, selected_target.model_id)
+        write_run_manifest(args, csv_path, jsonl_path, selected_target, selected_evaluator)
+    except (ValueError, OSError, yaml.YAMLError) as error:
         raise SystemExit(f"error: {error}") from error
 
     replicates_per_cell = 1 if args.single_run else args.replicates_per_cell
@@ -329,6 +394,7 @@ def main() -> None:
         evaluator_provider=selected_evaluator["provider"],
         evaluator_model=selected_evaluator["model"],
         evaluator_max_tokens=selected_evaluator["max_tokens"],
+        target_profile=selected_target,
     )
 
 

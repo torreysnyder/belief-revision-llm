@@ -1,0 +1,16 @@
+# Target profile; backend/model execution has not yet been validated.
+# Pin revision to a model commit before collecting reproducible results.
+model_id: "google/gemma-3-4b-it"
+revision: "main"
+dtype: "bfloat16"
+task: "image-text-to-text"
+loader: "AutoModelForImageTextToText"
+decoder_path: "model.language_model"
+layers_path: "model.language_model.layers"
+lm_head_path: "lm_head"
+final_norm_path: "model.language_model.norm"
+logits_path: "output.logits"
+system_role: "merge_system_into_user"
+assistant_end_token: "<end_of_turn>"
+assistant_end_suffix: "\n"
+layer_output_index: null

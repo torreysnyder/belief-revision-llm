@@ -6,6 +6,19 @@ score and its relationship to model hidden states.
 Main notebook:
 - `test_endorse_probe.ipynb`
 
+Run it in a CUDA GPU Colab runtime, following the setup/restart cells.
+The configuration cell accepts `MODEL_CONFIG_PATH`: upload one of the shared
+`configs/models/*.yaml` profiles and point to that file. A profile selects its
+model ID/revision, dtype, loader, architecture paths, and chat-role handling.
+Its dtype selects unquantized loading; without a profile the original
+Qwen2.5-7B `4bit` configuration remains in effect.
+
+Layer count and width come from the loaded model. The notebook uses native final
+logits and validates its cached head readout, including logit softcapping when
+present. Set an exact revision before collecting reproducible data and use a
+compatible Transformers/GPU environment; adding a profile is not a completed
+live validation of every model. Results include the target profile fingerprint.
+
 The notebook evaluates:
 1. AB endorsement/rejection probes across conversation checkpoints.
 2. Prediction of endorsement change from hidden-state change.

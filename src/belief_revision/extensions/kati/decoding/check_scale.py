@@ -21,22 +21,28 @@ import numpy as np
 import torch
 import pandas as pd
 import argparse
+from belief_revision.extensions.kati.decoding.extract_activations import validate_tensor_identity
 from pathlib import Path
 
 MULTIPLIERS = 10.0 ** np.arange(-4, 3.5, 0.5)
 
 
-def load_samples(run: Path, position: str) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
+def load_samples(run: Path, position: str, activations_dir: Path | None = None) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
     """Return activations [n, n_layers, d] at one position, with phase/conversation keys."""
 
     arrays, rows, layers = [], [], None
-    for path in sorted((run / "activations").glob("*.pt")):
+    identity = None
+    source = activations_dir or run / "activations"
+    for path in sorted(source.glob("*.pt")):
         saved = torch.load(path)
+        identity = validate_tensor_identity(saved, path, identity)
         layers = saved["layers"]
         index = saved["positions"].index(position)
         for c, checkpoint in enumerate(saved["checkpoints"]):
             arrays.append(saved["activations"][c, index].float().numpy())
             rows.append({"cell_id": saved["cell_id"], "replicate_index": saved["replicate_index"], "phase": checkpoint["phase"]})
+    if not arrays:
+        raise ValueError(f"No saved activation tensors found under {source}")
     return np.stack(arrays), pd.DataFrame(rows), layers
 
 
@@ -92,11 +98,12 @@ def grouped_r2(x: np.ndarray, y: np.ndarray, groups: np.ndarray, standardize: bo
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--activations-dir", type=Path, help="Use a separate capture directory created with extraction --out.")
     parser.add_argument("--position", default="prompt_end")
     parser.add_argument("--target", default="belief_core")
     args = parser.parse_args()
 
-    x, keys, layers = load_samples(args.run, args.position)
+    x, keys, layers = load_samples(args.run, args.position, args.activations_dir)
     labels = pd.read_csv(args.run / "labels.csv")[["cell_id", "replicate_index", "phase", args.target]]
     merged = keys.merge(labels, on=["cell_id", "replicate_index", "phase"], how="left")
     keep = merged[args.target].notna().to_numpy()

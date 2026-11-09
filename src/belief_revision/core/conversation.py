@@ -26,6 +26,7 @@ from .design import (
     select_evidence_by_condition,
 )
 from .llm import call_model
+from .model_profiles import TargetModelProfile
 from .models import (
     BehavioralProbeResult,
     ConversationResult,
@@ -503,12 +504,15 @@ def run_one_vignette(
     evaluator_provider: str = EVALUATOR_PROVIDER,
     evaluator_model: str = EVALUATOR_MODEL,
     evaluator_max_tokens: int = EVALUATOR_MAX_TOKENS,
+    target_profile: TargetModelProfile | None = None,
 ) -> ConversationResult:
     """Run one complete conversation replicate."""
 
     if evaluator_mode not in {"enabled", "disabled"}:
         raise ValueError(f"unknown evaluator mode: {evaluator_mode!r}")
 
+    selected_target = target_profile.model_id if target_profile is not None else TARGET_MODEL
+    target_options = {"target_profile": target_profile} if target_profile is not None else {}
     rng = random.Random(run_plan.seed)
 
     vignette, aux_mapping = counterbalance_vignette(
@@ -688,7 +692,7 @@ def run_one_vignette(
 
             before_generation_context = GenerationContext(
                 turn=deepcopy(user_turn_context),
-                model=TARGET_MODEL,
+                model=selected_target,
                 messages=tuple(deepcopy(target_messages)),
                 temperature=0.7,
                 max_tokens=500,
@@ -706,22 +710,24 @@ def run_one_vignette(
 
             if capture_plan.backend_requests:
                 assistant_generation = call_model(
-                    TARGET_MODEL,
+                    selected_target,
                     target_messages,
                     temperature=0.7,
                     capture_requests=capture_plan.backend_requests,
+                    **target_options,
                 )
             else:
                 assistant_generation = call_model(
-                    TARGET_MODEL,
+                    selected_target,
                     target_messages,
                     temperature=0.7,
+                    **target_options,
                 )
             assistant_text = assistant_generation.text
 
             after_generation_context = GenerationContext(
                 turn=deepcopy(user_turn_context),
-                model=TARGET_MODEL,
+                model=selected_target,
                 messages=tuple(deepcopy(target_messages)),
                 temperature=0.7,
                 max_tokens=500,

@@ -82,9 +82,10 @@ import argparse
 import platform
 import transformers
 import concurrent.futures
+from belief_revision.core.model_profiles import default_target_profile, get_model_layers, load_hf_target, load_target_profile, prepare_profile_messages, profile_from_dict
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+from transformers import AutoTokenizer, DynamicCache
 from types import SimpleNamespace
 
 DEFAULT_VECTOR_DIR = "vectors"
@@ -166,6 +167,8 @@ def load_vectors(vector_dir, control_type, seed):
     raw, residual = {}, {}
     for family in ("core", "auxiliary"):
         p = torch.load(os.path.join(vector_dir, f"{family}_caa_vectors.pt"), map_location="cpu", weights_only=False)
+        if p.get("target_profile") != metadata.get("target_profile"):
+            sys.exit(f"ERROR: {family} vectors disagree with the frozen target profile metadata.")
         if control_type not in p["vectors"]:
             sys.exit(f"ERROR: {family} vectors have no '{control_type}' control type.")
         raw[family] = p["vectors"][control_type].float()  # [L, H]
@@ -259,7 +262,8 @@ class Steerer:
     generated token: adding the vector to every position the hook sees therefore
     steers exactly the final prompt token and all generated tokens."""
 
-    def __init__(self, layer_modules, layers):
+    def __init__(self, layer_modules, layers, profile=None):
+        self.profile = profile
         self.vectors = {layer: None for layer in layers}
         self.handles = [layer_modules[layer].register_forward_hook(self._hook(layer)) for layer in layers]
 
@@ -268,14 +272,16 @@ class Steerer:
             vec = self.vectors[layer]
             if vec is None:
                 return output
-            hs = output[0] if isinstance(output, (tuple, list)) else output
+            index = self.profile.layer_output_index if self.profile is not None else None
+            index = 0 if index is None else index
+            hs = output[index] if isinstance(output, (tuple, list)) else output
             if hs.shape[1] != 1:
                 raise RuntimeError("steering hook expects one token per step (shared prompt cache)")
             hs = hs + vec[:, None, :]
             if isinstance(output, tuple):
-                return (hs,) + output[1:]
+                return output[:index] + (hs,) + output[index + 1 :]
             if isinstance(output, list):
-                return [hs] + output[1:]
+                return output[:index] + [hs] + output[index + 1 :]
             return hs
 
         return fn
@@ -343,11 +349,12 @@ def response_nll(model, cache, prompt_ids, responses, pad_id, device):
 def run_generation(args, items, conds, raw, residual, gens_path, done_keys, model_name, model_revision):
     print(f"Loading {model_name} @ {model_revision} ({args.dtype}) on {args.device} ...")
     tok = AutoTokenizer.from_pretrained(model_name, revision=model_revision)
-    model = AutoModelForCausalLM.from_pretrained(model_name, revision=model_revision, dtype=DTYPES[args.dtype]).to(args.device)
+    profile = getattr(args, "target_profile", None) or default_target_profile(model_name)
+    model = load_hf_target(profile, revision=model_revision, torch_dtype=DTYPES[args.dtype]).to(args.device)
     model.eval()
-    decoder = model.get_decoder() if hasattr(model, "get_decoder") else model.model
+    layers = get_model_layers(model, profile)
     steer_layers = sorted({c["layer"] for c in conds if c["layer"] is not None})
-    steerer = Steerer(decoder.layers, steer_layers)
+    steerer = Steerer(layers, steer_layers, profile)
     eos_ids = model.generation_config.eos_token_id
     eos_ids = set(eos_ids if isinstance(eos_ids, list) else [eos_ids])
     pad_id = tok.eos_token_id
@@ -360,7 +367,7 @@ def run_generation(args, items, conds, raw, residual, gens_path, done_keys, mode
         if not todo:
             continue
         messages = p["experimental_prompt"] if branch == "experimental" else p["control_prompt"]
-        prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        prompt = tok.apply_chat_template(prepare_profile_messages(messages, profile), tokenize=False, add_generation_prompt=True)
         stored = p.get(f"{branch}_prompt_rendered")
         if stored is not None and stored != prompt:
             sys.exit(f"ERROR: rendered {branch} prompt for {p['pair_id']} differs from the stored one (chat template drift).")
@@ -673,8 +680,28 @@ def print_cross_task(cross, layers, branches, families):
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+def vector_profile(metadata, config_path=None):
+    """Steering always stays in the target space used to construct its vectors."""
+
+    frozen = metadata.get("target_profile")
+    profile = profile_from_dict(frozen) if frozen is not None else default_target_profile(metadata["model_name"])
+    if profile.model_id != metadata["model_name"]:
+        raise ValueError("vector model identity conflicts with its target profile")
+    fingerprint = metadata.get("target_profile_fingerprint")
+    if fingerprint is not None and fingerprint != profile.fingerprint:
+        raise ValueError("vector target profile fingerprint is invalid")
+    if config_path:
+        requested = load_target_profile(config_path)
+        if frozen is None:
+            raise ValueError("legacy vectors have no frozen target profile; regenerate vectors before selecting --model-config")
+        if requested.to_dict() != profile.to_dict():
+            raise ValueError("selected target profile differs from the frozen vectors; build matching vectors first")
+    return profile
+
+
 def main():
     ap = argparse.ArgumentParser(description="CAA steering with Core / Auxiliary cross-task evaluation.")
+    ap.add_argument("--model-config", default=None, help="Validate a target profile against frozen vector provenance.")
     ap.add_argument("--vector-dir", default=DEFAULT_VECTOR_DIR)
     ap.add_argument("--diagnostics", default=DEFAULT_DIAGNOSTICS)
     ap.add_argument("--core-pairs", default=DEFAULT_CORE_PAIRS)
@@ -698,7 +725,7 @@ def main():
     ap.add_argument("--greedy", action="store_true", help="greedy decoding instead of the behavioral sampling")
     ap.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     ap.add_argument("--max-batch", type=int, default=16, help="conditions generated together per prompt")
-    ap.add_argument("--dtype", default="bfloat16" if torch.cuda.is_available() else "float32", choices=sorted(DTYPES), help="behavioral run used bfloat16 on CUDA")
+    ap.add_argument("--dtype", default=None, choices=sorted(DTYPES), help="behavioral run used bfloat16 on CUDA")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument(
         "--probe-history",
@@ -720,6 +747,8 @@ def main():
         sys.exit("ERROR: give at least one nonzero alpha.")
 
     metadata, raw, residual = load_vectors(args.vector_dir, args.vector_control, args.seed)
+    args.target_profile = vector_profile(metadata, args.model_config)
+    args.dtype = args.dtype or (args.target_profile.dtype if metadata.get("target_profile") else ("bfloat16" if torch.cuda.is_available() else "float32"))
     n_layers = metadata["n_layers"]
     if args.layers == ["auto"]:
         layers, layer_rule = auto_layers(args.diagnostics, args.vector_control, n_layers, args.n_auto_layers)
@@ -744,6 +773,8 @@ def main():
             ("vector_control", args.vector_control),
             ("vector_files_sha256", metadata["output_files"]),
             ("model_name", metadata["model_name"]),
+            ("target_profile", args.target_profile.to_dict()),
+            ("target_profile_fingerprint", args.target_profile.fingerprint),
             ("model_revision", metadata["model_revision"]),
             ("activation_location", metadata["activation_location"]),
             ("alpha_units", args.alpha_units),

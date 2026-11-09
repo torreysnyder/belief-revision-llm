@@ -54,8 +54,16 @@ import torch
 import pandas as pd
 import argparse
 from belief_revision.core.conversation import make_target_system_prompt
-from belief_revision.core.defaults import TARGET_MODEL
-from belief_revision.extensions.kati.decoding.extract_activations import build_messages, checkpoint_turns
+from belief_revision.core.defaults import TARGET_MODEL as TARGET_MODEL
+from belief_revision.core.model_profiles import TargetModelProfile, get_model_layers, layer_output, load_target_profile, model_tokenizer, resolve_attribute
+from belief_revision.extensions.kati.decoding.extract_activations import (
+    build_messages,
+    checkpoint_turns,
+    ensure_output_manifest,
+    render_chat,
+    validate_cached_capture,
+    validate_tensor_identity,
+)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from nnsight import save as nnsight_save
@@ -93,11 +101,11 @@ def probe_specs() -> list[tuple[str, str, str]]:
     return [(claim, mapping, fmt) for claim in CLAIMS for mapping in MAPPINGS for fmt in FORMATS]
 
 
-def probe_text(tokenizer, prefix: list[dict[str, str]], claim: str, mapping: str, fmt: str) -> str:
+def probe_text(tokenizer, prefix: list[dict[str, str]], claim: str, mapping: str, fmt: str, profile: TargetModelProfile | None = None) -> str:
     """Render prefix + probe question with the chat template and the assistant prefill."""
 
     messages = [*prefix, {"role": "user", "content": probe_message(claim, mapping, fmt)}]
-    return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) + PREFILL
+    return render_chat(tokenizer, messages, profile, add_generation_prompt=True) + PREFILL
 
 
 def option_token_ids(tokenizer) -> list[int]:
@@ -113,14 +121,17 @@ def option_token_ids(tokenizer) -> list[int]:
     return ids
 
 
-def run_batch(model, texts: list[str], layers: list[int], option_ids: list[int]) -> tuple[torch.Tensor, torch.Tensor]:
+def run_batch(model, texts: list[str], layers: list[int], option_ids: list[int], profile: TargetModelProfile | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     """One NDIF request: returns hidden [batch, n_layers, d] and option logits [batch, 6] at the last token."""
 
     with model.trace(texts, remote=True):
         hidden = nnsight_save([])
         for layer in layers:
-            hidden.append(model.model.layers[layer].output[:, -1, :].float().cpu())
-        logits = model.lm_head.output[:, -1, option_ids].float().cpu().save()
+            collection = get_model_layers(model, profile) if profile is not None else model.model.layers
+            output = layer_output(collection[layer].output, profile) if profile is not None else collection[layer].output
+            hidden.append(output[:, -1, :].float().cpu())
+        final_logits = resolve_attribute(model, profile.logits_path) if profile is not None else model.lm_head.output
+        logits = final_logits[:, -1, option_ids].float().cpu().save()
     return torch.stack(list(hidden), dim=1), logits
 
 
@@ -139,12 +150,14 @@ def readout(logits: torch.Tensor, mapping: str, fmt: str) -> dict[str, float]:
     return out
 
 
-def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, str], layers: list[int], option_ids: list[int], batch_size: int) -> tuple[list[dict[str, object]], torch.Tensor]:
+def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, str], layers: list[int], option_ids: list[int], batch_size: int, profile: TargetModelProfile | None = None) -> tuple[list[dict[str, object]], torch.Tensor]:
     """Run all 12 probes for one dialogue prefix, batch_size prompts per NDIF request; returns score rows and AB hidden [3, 2, n_layers, d]."""
 
     specs = probe_specs()
-    texts = [probe_text(model.tokenizer, prefix, claims[claim], mapping, fmt) for claim, mapping, fmt in specs]
-    chunks = [run_batch(model, texts[i : i + batch_size], layers, option_ids) for i in range(0, len(texts), batch_size)]
+    tokenizer = model_tokenizer(model) if profile is not None else model.tokenizer
+    texts = [probe_text(tokenizer, prefix, claims[claim], mapping, fmt, profile) for claim, mapping, fmt in specs]
+    options = {"profile": profile} if profile is not None else {}
+    chunks = [run_batch(model, texts[i : i + batch_size], layers, option_ids, **options) for i in range(0, len(texts), batch_size)]
     hidden, logits = torch.cat([h for h, _ in chunks]), torch.cat([g for _, g in chunks])
     rows, ab_hidden = [], torch.zeros(len(CLAIMS), len(MAPPINGS), len(layers), hidden.shape[-1])
     for i, (claim, mapping, fmt) in enumerate(specs):
@@ -154,23 +167,26 @@ def probe_prefix_batch(model, prefix: list[dict[str, str]], claims: dict[str, st
     return rows, ab_hidden
 
 
-def run_baseline(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int) -> None:
+def run_baseline(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int, profile: TargetModelProfile | None = None, fingerprint: str | None = None) -> None:
     """Claim-only probes (system prompt + probe, no dialogue)."""
 
     path = out_dir / "baseline.pt"
     if path.exists():
+        validate_cached_capture(path, fingerprint, profile)
         return
     prefix = [{"role": "system", "content": make_target_system_prompt()}]
-    rows, hidden = probe_prefix_batch(model, prefix, claim_texts(record), layers, option_ids, batch_size)
-    torch.save({"vignette_id": record["vignette_id"], "layers": layers, "scores": rows, "hidden": hidden.to(torch.float16)}, path)
+    options = {"profile": profile} if profile is not None else {}
+    rows, hidden = probe_prefix_batch(model, prefix, claim_texts(record), layers, option_ids, batch_size, **options)
+    torch.save({**({"target_profile": profile.to_dict(), "capture_fingerprint": fingerprint} if profile is not None else {}), "vignette_id": record["vignette_id"], "layers": layers, "scores": rows, "hidden": hidden.to(torch.float16)}, path)
     print(f"saved {path.name}")
 
 
-def process(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int) -> str:
+def process(model, record: dict[str, object], out_dir: Path, layers: list[int], option_ids: list[int], batch_size: int, profile: TargetModelProfile | None = None, fingerprint: str | None = None) -> str:
     """Probe one conversation at every checkpoint, skipping it if already saved."""
 
     path = out_dir / f"{record['cell_id']}__rep{record['replicate_index']}.pt"
     if path.exists():
+        validate_cached_capture(path, fingerprint, profile)
         return f"skip {path.name}"
     messages = build_messages(record)
     claims = claim_texts(record)
@@ -179,20 +195,35 @@ def process(model, record: dict[str, object], out_dir: Path, layers: list[int], 
         prefix = messages[: 1 + 2 * int(checkpoint["global_turn_index"])]  # system + every turn through this reply
         if prefix[-1]["role"] != "assistant":
             raise ValueError(f"checkpoint {checkpoint['phase']} does not end on an assistant reply")
-        rows, ab_hidden = probe_prefix_batch(model, prefix, claims, layers, option_ids, batch_size)
+        options = {"profile": profile} if profile is not None else {}
+        rows, ab_hidden = probe_prefix_batch(model, prefix, claims, layers, option_ids, batch_size, **options)
         scores += [{"phase": checkpoint["phase"], **row} for row in rows]
         hidden.append(ab_hidden)
-    torch.save({"cell_id": record["cell_id"], "replicate_index": record["replicate_index"], "layers": layers, "phases": [c["phase"] for c in checkpoint_turns()], "scores": scores, "hidden": torch.stack(hidden).to(torch.float16)}, path)
+    torch.save(
+        {
+            **({"target_profile": profile.to_dict(), "capture_fingerprint": fingerprint} if profile is not None else {}),
+            "cell_id": record["cell_id"],
+            "replicate_index": record["replicate_index"],
+            "layers": layers,
+            "phases": [c["phase"] for c in checkpoint_turns()],
+            "scores": scores,
+            "hidden": torch.stack(hidden).to(torch.float16),
+        },
+        path,
+    )
     return f"saved {path.name}"
 
 
 def collect(out_dir: Path) -> pd.DataFrame:
     """Gather every probe score into one table with changes from the claim-only baseline."""
 
-    baseline = pd.DataFrame(torch.load(out_dir / "baseline.pt")["scores"])
+    baseline_saved = torch.load(out_dir / "baseline.pt")
+    expected = validate_tensor_identity(baseline_saved, out_dir / "baseline.pt")
+    baseline = pd.DataFrame(baseline_saved["scores"])
     rows = []
     for path in sorted(out_dir.glob("*__rep*.pt")):
         saved = torch.load(path)
+        validate_tensor_identity(saved, path, expected)
         for row in saved["scores"]:
             rows.append({"cell_id": saved["cell_id"], "replicate_index": saved["replicate_index"], **row})
     scores = pd.DataFrame(rows)
@@ -209,6 +240,8 @@ def collect(out_dir: Path) -> pd.DataFrame:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--model-config", type=Path, help="Target profile YAML; does not modify shared defaults.")
+    parser.add_argument("--model", help="Target model ID instead of a profile YAML.")
     parser.add_argument("--out", type=Path, default=None, help="Output folder (default: <run>/endorsement).")
     parser.add_argument("--layers", default=None, help="Comma-separated zero-based layers (default: all).")
     parser.add_argument("--limit", type=int, default=None)
@@ -219,40 +252,56 @@ def main() -> None:
     args = parser.parse_args()
 
     for stream in (sys.stdout, sys.stderr):  # NDIF status lines use symbols the Windows default codec can't encode when output is redirected
-        stream.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     load_dotenv()
     out_dir = args.out or args.run / "endorsement"
     if args.collect:
+        if args.model_config is not None or args.model is not None:
+            parser.error("--collect uses saved tensor identities; omit --model-config and --model")
         scores = collect(out_dir)
         summary = scores.groupby(["claim", "format", "mapping", "phase"])["E"].mean().unstack("phase")
         print(f"{len(scores)} probe rows -> {out_dir / 'scores.csv'}\nmean E:\n{summary.round(2)}")
         return
 
+    profile = load_target_profile(args.model_config, model_id=args.model)
+    requested_layers = [int(x) for x in args.layers.split(",")] if args.layers else None
     with (args.run / "dialogues.jsonl").open(encoding="utf-8") as file:
         records = [json.loads(line) for line in file if line.strip()][: args.limit]
 
     if args.dry_run:
         from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(TARGET_MODEL)
+        tokenizer = AutoTokenizer.from_pretrained(profile.model_id, revision=profile.revision)
         messages = build_messages(records[0])
-        text = probe_text(tokenizer, messages[:7], claim_texts(records[0])["A1"], "B_endorse", "ABC")
+        text = probe_text(tokenizer, messages[:7], claim_texts(records[0])["A1"], "B_endorse", "ABC", profile)
         print(f"option ids {option_token_ids(tokenizer)}\n...{text[-600:]}")
         return
 
     from belief_revision.core.llm import get_model
 
-    model = get_model(TARGET_MODEL)
-    model.tokenizer.padding_side = "left"
-    if model.tokenizer.pad_token is None:
-        model.tokenizer.pad_token = model.tokenizer.eos_token
-    layers = [int(x) for x in args.layers.split(",")] if args.layers else list(range(len(model.model.layers)))
-    option_ids = option_token_ids(model.tokenizer)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    run_baseline(model, records[0], out_dir, layers, option_ids, args.batch_size)
+    fingerprint = ensure_output_manifest(
+        out_dir,
+        args.run / "dialogues.jsonl",
+        profile,
+        requested_layers,
+        "endorsement",
+        {"question": QUESTION, "prefill": PREFILL, "claims": list(CLAIMS), "mappings": MAPPINGS, "formats": list(FORMATS), "withhold": WITHHOLD, "letters": list(LETTERS)},
+    )
+    model = get_model(profile.model_id, target_profile=profile)
+    tokenizer = model_tokenizer(model)
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    collection = get_model_layers(model, profile)
+    layers = requested_layers if requested_layers is not None else list(range(len(collection)))
+    if any(layer < 0 or layer >= len(collection) for layer in layers):
+        raise ValueError("Requested probe layer is outside the target model")
+    option_ids = option_token_ids(tokenizer)
+    run_baseline(model, records[0], out_dir, layers, option_ids, args.batch_size, profile, fingerprint)
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as pool:
-        futures = {pool.submit(process, model, record, out_dir, layers, option_ids, args.batch_size): record for record in records}
+        futures = {pool.submit(process, model, record, out_dir, layers, option_ids, args.batch_size, profile, fingerprint): record for record in records}
         for done, future in enumerate(as_completed(futures), 1):
             record = futures[future]
             try:

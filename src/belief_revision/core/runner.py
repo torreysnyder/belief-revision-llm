@@ -17,6 +17,7 @@ from .defaults import (
     USER_SIM_MODEL,
 )
 from .design import build_primary_cells, build_run_plans
+from .model_profiles import TargetModelProfile
 from .models import ConversationResult, EvaluatorMode, PrimaryCell, RunPlan, Vignette
 from collections.abc import Sequence
 from pathlib import Path
@@ -30,6 +31,7 @@ def _run_replicate(
     evaluator_provider: str,
     evaluator_model: str,
     evaluator_max_tokens: int,
+    target_profile: TargetModelProfile | None,
 ) -> ConversationResult:
     """Build replicate-local extensions and run one conversation."""
 
@@ -42,6 +44,7 @@ def _run_replicate(
         evaluator_provider=evaluator_provider,
         evaluator_model=evaluator_model,
         evaluator_max_tokens=evaluator_max_tokens,
+        target_profile=target_profile,
     )
 
 
@@ -54,6 +57,7 @@ def run_primary_cell(
     evaluator_provider: str = EVALUATOR_PROVIDER,
     evaluator_model: str = EVALUATOR_MODEL,
     evaluator_max_tokens: int = EVALUATOR_MAX_TOKENS,
+    target_profile: TargetModelProfile | None = None,
 ) -> list[ConversationResult]:
     """Run every configured replicate for one primary cell."""
 
@@ -77,6 +81,7 @@ def run_primary_cell(
                 evaluator_provider=evaluator_provider,
                 evaluator_model=evaluator_model,
                 evaluator_max_tokens=evaluator_max_tokens,
+                target_profile=target_profile,
             ): run_plan
             for run_plan in run_plans
         }
@@ -110,6 +115,7 @@ def run_experiment(
     evaluator_provider: str = EVALUATOR_PROVIDER,
     evaluator_model: str = EVALUATOR_MODEL,
     evaluator_max_tokens: int = EVALUATOR_MAX_TOKENS,
+    target_profile: TargetModelProfile | None = None,
 ) -> int:
     """Run the experiment and return the number of completed conversations."""
 
@@ -134,11 +140,14 @@ def run_experiment(
         "evaluator_provider": evaluator_provider,
         "evaluator_max_tokens": evaluator_max_tokens,
     }
+    if target_profile is not None:
+        run_config["target_profile"] = target_profile.to_dict()
+        run_config["target_profile_fingerprint"] = target_profile.fingerprint
     active_backends = [
         (
             backend,
             backend.start_run(
-                target_model=TARGET_MODEL,
+                target_model=target_profile.model_id if target_profile is not None else TARGET_MODEL,
                 user_sim_model=USER_SIM_MODEL,
                 evaluator_model=evaluator_model,
                 config=run_config,
@@ -171,6 +180,7 @@ def run_experiment(
                 evaluator_provider=evaluator_provider,
                 evaluator_model=evaluator_model,
                 evaluator_max_tokens=evaluator_max_tokens,
+                target_profile=target_profile,
             )
 
             for backend, run_id in active_backends:

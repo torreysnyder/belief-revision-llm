@@ -82,7 +82,7 @@ CONSTRUCTION_SPLIT = "train"
 DIAGNOSTIC_SPLIT = "validation"
 
 # Provenance fields that must agree between the Core and Auxiliary activation files.
-INVARIANT_FIELDS = ["model_name", "model_revision", "tokenizer_revision", "activation_location", "token_position", "n_layers", "hidden_dim", "chat_template_hash", "extraction_script_version", "split_manifest_sha256"]
+INVARIANT_FIELDS = ["target_profile", "target_profile_fingerprint", "model_name", "model_revision", "tokenizer_revision", "activation_location", "token_position", "n_layers", "hidden_dim", "chat_template_hash", "extraction_script_version", "split_manifest_sha256"]
 
 NORMALIZATION = "none: v[l] is the raw mean of the per-pair differences h_experimental - h_control at layer l; unit_vectors holds v[l] / ||v[l]||"
 
@@ -391,6 +391,8 @@ def main():
             ("build_script_version", script_sha),
             ("build_timestamp", timestamp),
             ("model_name", payloads["core"]["model_name"]),
+            ("target_profile", payloads["core"].get("target_profile")),
+            ("target_profile_fingerprint", payloads["core"].get("target_profile_fingerprint")),
             ("model_revision", payloads["core"]["model_revision"]),
             ("tokenizer_revision", payloads["core"]["tokenizer_revision"]),
             ("activation_location", payloads["core"]["activation_location"]),

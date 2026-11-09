@@ -48,7 +48,7 @@ import torch
 import pandas as pd
 import argparse
 from belief_revision.extensions.kati.decoding.check_scale import load_samples
-from belief_revision.extensions.kati.decoding.extract_activations import checkpoint_turns
+from belief_revision.extensions.kati.decoding.extract_activations import checkpoint_turns, validate_tensor_identity
 from pathlib import Path
 
 PHASES = ["intro", "core_challenge_1", "core_challenge_2", "closing"]
@@ -73,10 +73,10 @@ def build_targets(labels: pd.DataFrame) -> pd.DataFrame:
 ENDORSEMENT_TARGETS = {"dE": ("AB", None, "dE"), "dEA": ("AB", "A_endorse", "dE"), "dEB": ("AB", "B_endorse", "dE"), "dU": ("ABC", None, "dU"), "dqW": ("ABC", None, "dq_withhold")}
 
 
-def endorsement_labels(run: Path) -> pd.DataFrame:
+def endorsement_labels(run: Path, endorsement_dir: Path | None = None) -> pd.DataFrame:
     """One row per (conversation, checkpoint) with <claim>_<target> columns from the endorsement probe."""
 
-    scores = pd.read_csv(run / "endorsement" / "scores.csv")
+    scores = pd.read_csv((endorsement_dir or run / "endorsement") / "scores.csv")
     keys = ["cell_id", "replicate_index", "phase"]
     columns = []
     for target, (fmt, mapping, value) in ENDORSEMENT_TARGETS.items():
@@ -103,17 +103,22 @@ def align(keys: pd.DataFrame, labels: pd.DataFrame, required: list[str]) -> tupl
     return merged[keep].reset_index(drop=True), keep
 
 
-def load_probe_samples(run: Path, claim: str, mapping: str) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
+def load_probe_samples(run: Path, claim: str, mapping: str, endorsement_dir: Path | None = None) -> tuple[np.ndarray, pd.DataFrame, list[int]]:
     """Hidden state at the probe's "Answer:" token for one claim and mapping: [n, n_layers, d]."""
 
     claims, mappings = ["core", "A1", "A2"], ["A_endorse", "B_endorse"]
     arrays, rows, layers = [], [], None
-    for path in sorted((run / "endorsement").glob("*__rep*.pt")):
+    identity = None
+    source = endorsement_dir or run / "endorsement"
+    for path in sorted(source.glob("*__rep*.pt")):
         saved = torch.load(path)
+        identity = validate_tensor_identity(saved, path, identity)
         layers = saved["layers"]
         for c, phase in enumerate(saved["phases"]):
             arrays.append(saved["hidden"][c, claims.index(claim), mappings.index(mapping)].float().numpy())
             rows.append({"cell_id": saved["cell_id"], "replicate_index": saved["replicate_index"], "phase": phase})
+    if not arrays:
+        raise ValueError(f"No saved endorsement tensors found under {source}")
     return np.stack(arrays), pd.DataFrame(rows), layers
 
 
@@ -310,6 +315,8 @@ def build_label_matrix(targets: pd.DataFrame, phase: np.ndarray, seed: int = 1) 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--activations-dir", type=Path, help="Use a separate extraction --out directory.")
+    parser.add_argument("--endorsement-dir", type=Path, help="Use a separate endorsement --out directory.")
     parser.add_argument("--positions", default="prompt_end,reply_last")
     parser.add_argument("--layers", default=None, help="Comma-separated layer numbers (default: all).")
     parser.add_argument("--text-only", action="store_true")
@@ -318,7 +325,7 @@ def main() -> None:
     parser.add_argument("--out-name", default="results")
     args = parser.parse_args()
 
-    labels = pd.read_csv(args.run / "labels.csv") if args.labels == "evaluator" else endorsement_labels(args.run)
+    labels = pd.read_csv(args.run / "labels.csv") if args.labels == "evaluator" else endorsement_labels(args.run, args.endorsement_dir)
     required = target_columns(labels, args.labels)
     out_dir = args.run / "decoding"
     out_dir.mkdir(exist_ok=True)
@@ -337,9 +344,9 @@ def main() -> None:
     for position in [] if args.text_only else args.positions.split(","):
         if position.startswith("probe:"):
             _, claim, mapping = position.split(":")
-            x, keys, layers = load_probe_samples(args.run, claim, mapping)
+            x, keys, layers = load_probe_samples(args.run, claim, mapping, args.endorsement_dir)
         else:
-            x, keys, layers = load_samples(args.run, position)
+            x, keys, layers = load_samples(args.run, position, args.activations_dir)
         merged, keep, phase, folds, y, names = prepare(keys)
         x = x[keep]
         wanted = [int(v) for v in args.layers.split(",")] if args.layers else layers

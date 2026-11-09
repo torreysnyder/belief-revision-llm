@@ -33,6 +33,37 @@ uv run --no-sync python -m belief_revision.extensions.kati.decoding.extract_acti
 uv run --no-sync python -m belief_revision.extensions.kati.decoding.make_labels --run runs/NAME     # writes labels.csv
 ```
 
+## Target configuration for new captures
+
+Pass a checked-in profile instead of editing shared defaults, for example:
+
+```bash
+uv run python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/NAME --model-config configs/models/llama-3.1-8b-instruct.yaml --out runs/NAME/activations-llama-profile
+uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/NAME --model-config configs/models/llama-3.1-8b-instruct.yaml --out runs/NAME/endorsement-llama-profile
+```
+
+`--model MODEL_ID` selects compatibility defaults instead of a YAML profile.
+Profiles configure the target identity/revision, chat-role policy, assistant
+turn-ending delimiter/suffix, layer collection, output representation, and
+final-logit path. The tokenizer must keep completed prefixes stable and encode
+the configured turn delimiter and AB options as single tokens; incompatible
+templates fail explicitly. Layer counts and tensor widths come from the model.
+No profile claims that a remote deployment or its weight precision has been
+validated. Pin the revision before final experiments; `main` remains mutable.
+
+New capture directories get `capture_manifest.json` covering the requested
+profile, layers, checkpoints, prompt, and source dialogue hash. Matching files
+resume; a changed identity/configuration/source or a legacy cache without this
+manifest requires a fresh `--out`. Existing legacy tensors remain readable for
+analysis; they are not silently relabeled as a newly selected model.
+
+For a separate output directory, use `check_scale --activations-dir PATH` or
+`decode --activations-dir PATH`. After `endorsement_probe --out PATH --collect`,
+use `decode --labels endorsement --endorsement-dir PATH`. Choose a fresh
+`--out-name` for each analysis. Collection and decoding check available model,
+layer, and tensor-width metadata before combining files; all-legacy files with
+missing model identity cannot establish cross-model provenance.
+
 ## Things found while building it
 - **Double BOS.** The run pipeline renders the chat template to text (which starts with `<|begin_of_text|>`) and then the tokenizer adds another BOS, so every prompt starts `[128000, 128000, ...]`. Extraction mirrors this exactly so positions and activations match the live runs. Probably harmless, but worth telling Jason & Tris.
 - **Auxiliary labels are in display order.** With `aux_order_condition="reversed"`, the evaluator's `belief_A1` is the *contextual* auxiliary. `make_labels.py` maps back to canonical (A1 = methodological, A2 = contextual) via `canonical_to_display_A1/A2`. Not yet verified against the probe prompt template wording.

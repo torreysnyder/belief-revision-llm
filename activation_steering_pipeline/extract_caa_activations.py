@@ -59,9 +59,10 @@ import hashlib
 import argparse
 import platform
 import transformers
+from belief_revision.core.model_profiles import default_target_profile, get_model_layers, get_text_config, load_hf_target, load_target_profile, prepare_profile_messages, profile_from_dict, resolve_attribute
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime, timezone
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
 DEFAULT_CORE_PAIRS = "data/caa_pairs_core.jsonl"
 DEFAULT_AUX_PAIRS = "data/caa_pairs_auxiliary.jsonl"
@@ -245,27 +246,32 @@ def resolve_revision(name, revision):
         return revision
 
 
-def load_model_and_tokenizer(name, revision, dtype, device, attn_implementation):
-    resolved = resolve_revision(name, revision)
+def load_model_and_tokenizer(name, revision, dtype, device, attn_implementation, profile=None):
+    profile = profile or default_target_profile(name)
+    resolved = resolve_revision(name, revision or profile.revision)
     tok = AutoTokenizer.from_pretrained(name, revision=resolved)
     kwargs = {"revision": resolved, "torch_dtype": DTYPES[dtype]}
     if attn_implementation:
         kwargs["attn_implementation"] = attn_implementation
-    model = AutoModelForCausalLM.from_pretrained(name, **kwargs).to(device)
+    model = load_hf_target(profile, **kwargs).to(device)
     model.eval()
     commit = getattr(model.config, "_commit_hash", None) or resolved
     return model, tok, commit
 
 
-def decoder_layers(model):
-    decoder = model.get_decoder() if hasattr(model, "get_decoder") else model.model
-    return decoder, decoder.layers
+def decoder_layers(model, profile=None):
+    if profile is None:
+        decoder = model.get_decoder() if hasattr(model, "get_decoder") else model.model
+        return decoder, decoder.layers
+    return resolve_attribute(model, profile.decoder_path), get_model_layers(model, profile)
 
 
 # ---------------------------------------------------------------------------
 # 7.3 prompt reconstruction + verification
 # ---------------------------------------------------------------------------
-def render(tok, messages, generation_prompt=True):
+def render(tok, messages, generation_prompt=True, profile=None):
+    if profile is not None:
+        messages = prepare_profile_messages(messages, profile)
     return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=generation_prompt)
 
 
@@ -289,7 +295,7 @@ def message_problems(messages):
     return problems
 
 
-def prepare_pair(tok, pair, position_name):
+def prepare_pair(tok, pair, position_name, profile=None):
     """Renders, tokenizes and verifies both branches of one pair."""
     exp_msgs, ctrl_msgs = pair["experimental_prompt"], pair["control_prompt"]
     checks = OrderedDict()
@@ -298,14 +304,14 @@ def prepare_pair(tok, pair, position_name):
     checks["experimental_turn_matches_text"] = exp_msgs[-1].get("content") == pair.get("experimental_text")
     checks["control_turn_matches_text"] = ctrl_msgs[-1].get("content") == pair.get("control_text")
 
-    exp_text, ctrl_text = render(tok, exp_msgs), render(tok, ctrl_msgs)
+    exp_text, ctrl_text = render(tok, exp_msgs, profile=profile), render(tok, ctrl_msgs, profile=profile)
     stored_exp, stored_ctrl = pair.get("experimental_prompt_rendered"), pair.get("control_prompt_rendered")
     checks["experimental_render_matches_stored"] = None if stored_exp is None else exp_text == stored_exp
     checks["control_render_matches_stored"] = None if stored_ctrl is None else ctrl_text == stored_ctrl
 
-    parent = render(tok, exp_msgs[:-1], generation_prompt=False)
+    parent = render(tok, exp_msgs[:-1], generation_prompt=False, profile=profile)
     checks["parent_prefix_match"] = exp_text.startswith(parent) and ctrl_text.startswith(parent)
-    exp_nogen, ctrl_nogen = render(tok, exp_msgs, False), render(tok, ctrl_msgs, False)
+    exp_nogen, ctrl_nogen = render(tok, exp_msgs, False, profile), render(tok, ctrl_msgs, False, profile)
     gen_tail = exp_text[len(exp_nogen) :]
     checks["ends_with_generation_prompt"] = exp_text.startswith(exp_nogen) and ctrl_text.startswith(ctrl_nogen) and len(gen_tail) > 0 and ctrl_text[len(ctrl_nogen) :] == gen_tail
 
@@ -341,7 +347,8 @@ class BlockOutputCapture:
     the mean over that row's requested token positions, so full sequences of
     hidden states are never held in memory."""
 
-    def __init__(self, layers):
+    def __init__(self, layers, profile=None):
+        self.profile = profile
         self.layers = layers
         self.positions = None  # list (per batch row) of index lists
         self.captured = [None] * len(layers)
@@ -349,7 +356,8 @@ class BlockOutputCapture:
 
     def _hook(self, i):
         def fn(module, inputs, output):
-            hs = output[0] if isinstance(output, (tuple, list)) else output
+            index = self.profile.layer_output_index if self.profile is not None else None
+            hs = output[index] if index is not None else (output[0] if isinstance(output, (tuple, list)) else output)
             rows = []
             for b, idx in enumerate(self.positions):
                 rows.append(hs[b, idx, :].float().mean(dim=0))
@@ -391,7 +399,7 @@ def run_batches(model, decoder, capture, prompts, pad_id, device, batch_size):
     return out
 
 
-def self_check(model, decoder, capture, prompt, device):
+def self_check(model, decoder, capture, prompt, device, profile=None):
     """Confirms the hooks capture what ACTIVATION_LOCATION claims: block l output
     equals hidden_states[l+1], and the final norm of the last block output equals
     the last hidden state."""
@@ -407,7 +415,7 @@ def self_check(model, decoder, capture, prompt, device):
     for layer_index in range(n - 1):
         max_diff = max(max_diff, (hooked[layer_index] - hs[layer_index + 1][0, pos].float().cpu()).abs().max().item())
     result = {"n_hidden_states": len(hs), "n_layers": n, "max_abs_diff_block_vs_hidden_states": max_diff}
-    norm = getattr(decoder, "norm", None)
+    norm = resolve_attribute(model, profile.final_norm_path) if profile is not None else getattr(decoder, "norm", None)
     if norm is not None:
         with torch.inference_mode():
             last_normed = norm(hooked[-1].to(device=device, dtype=hs[-1].dtype)[None])[0].float().cpu()
@@ -488,6 +496,25 @@ def pair_metadata(pair, split, prep, tok, position_name):
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+def extraction_profile(manifest, config_path=None, model_name=None):
+    """Resolve the target and reject a profile inconsistent with frozen pairs."""
+
+    frozen = manifest.get("target_profile")
+    if config_path:
+        profile = load_target_profile(config_path, model_id=model_name)
+    elif frozen is not None:
+        profile = profile_from_dict(frozen)
+        if model_name is not None and model_name != profile.model_id:
+            raise ValueError("--model conflicts with the pair target profile")
+    else:
+        profile = default_target_profile(model_name or manifest.get("target_model") or FALLBACK_MODEL)
+    if manifest.get("target_model", profile.model_id) != profile.model_id:
+        raise ValueError("selected target differs from the pair manifest; generate matching pairs first")
+    if frozen is not None and frozen != profile.to_dict():
+        raise ValueError("selected profile differs from the pair manifest; generate matching pairs first")
+    return profile
+
+
 def main():
     ap = argparse.ArgumentParser(description="Extract pair-level residual-stream activations for CAA.")
     ap.add_argument("--core-pairs", default=DEFAULT_CORE_PAIRS)
@@ -495,9 +522,10 @@ def main():
     ap.add_argument("--pair-manifest", default=DEFAULT_PAIR_MANIFEST)
     ap.add_argument("--split-manifest", default=DEFAULT_SPLIT_MANIFEST)
     ap.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
+    ap.add_argument("--model-config", default=None, help="Target profile YAML; must agree with the pair manifest.")
     ap.add_argument("--model", default=None, help="defaults to target_model in the pair manifest")
     ap.add_argument("--model-revision", default=None, help="commit hash to pin; default resolves 'main' once and records it")
-    ap.add_argument("--dtype", default="float32", choices=sorted(DTYPES), help="forward-pass dtype (behavioral run used bfloat16 on CUDA)")
+    ap.add_argument("--dtype", default=None, choices=sorted(DTYPES), help="forward-pass dtype (behavioral run used bfloat16 on CUDA)")
     ap.add_argument("--save-dtype", default="float32", choices=sorted(DTYPES))
     ap.add_argument("--attn-implementation", default=None, help="e.g. eager or sdpa; default = library default")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -542,11 +570,17 @@ def main():
     # The split covers every conversation in the pair data, independent of QC.
     split_map, split_manifest, split_created = load_or_create_split(args.split_manifest, all_pairs, args.split_seed, tuple(args.split_fractions), args.stratify, input_hashes)
 
-    model_name = args.model or default_model_name(args.pair_manifest)
+    pair_manifest = {}
+    if os.path.exists(args.pair_manifest):
+        with open(args.pair_manifest, encoding="utf-8") as file:
+            pair_manifest = json.load(file)
+    profile = extraction_profile(pair_manifest, args.model_config, args.model)
+    model_name = profile.model_id
+    args.dtype = args.dtype or (profile.dtype if args.model_config or pair_manifest.get("target_profile") else "float32")
     print(f"Loading {model_name} ({args.dtype}) on {args.device} ...")
-    model, tok, model_revision = load_model_and_tokenizer(model_name, args.model_revision, args.dtype, args.device, args.attn_implementation)
-    decoder, layers = decoder_layers(model)
-    n_layers, hidden_dim = len(layers), model.config.hidden_size
+    model, tok, model_revision = load_model_and_tokenizer(model_name, args.model_revision, args.dtype, args.device, args.attn_implementation, profile)
+    decoder, layers = decoder_layers(model, profile)
+    n_layers, hidden_dim = len(layers), get_text_config(model).hidden_size
     chat_template = tok.chat_template or ""
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
     print(f"Model revision {model_revision} | {n_layers} layers x {hidden_dim} | chat template sha256 {sha256_text(chat_template)[:12]}")
@@ -560,7 +594,7 @@ def main():
             eligible = eligible[: args.limit]
         prepared, mismatched = [], []
         for p in eligible:
-            prep = prepare_pair(tok, p, args.token_position)
+            prep = prepare_pair(tok, p, args.token_position, profile)
             if not prep["prompt_match_verified"]:
                 failed = [k for k, v in prep["checks"].items() if v is False]
                 mismatched.append((p["pair_id"], failed))
@@ -586,10 +620,10 @@ def main():
                 unique.setdefault(key, {"ids": b["ids"], "positions": b["positions"]})
     print(f"Running {len(unique)} unique prompts (batch size {args.batch_size}) ...")
 
-    capture = BlockOutputCapture(layers)
+    capture = BlockOutputCapture(layers, profile)
     check = None
     if unique:
-        check = self_check(model, decoder, capture, next(iter(unique.values())), args.device)
+        check = self_check(model, decoder, capture, next(iter(unique.values())), args.device, profile)
         print(f"Hook self-check: {check}")
         if not check["passed"]:
             sys.exit("ERROR: hooked block outputs do not match hidden_states; activation_location would be mislabelled. Check the transformers version / model architecture.")
@@ -602,6 +636,8 @@ def main():
         [
             ("format_version", FORMAT_VERSION),
             ("model_name", model_name),
+            ("target_profile", profile.to_dict()),
+            ("target_profile_fingerprint", profile.fingerprint),
             ("model_revision", model_revision),
             ("tokenizer_name", model_name),
             ("tokenizer_revision", model_revision),

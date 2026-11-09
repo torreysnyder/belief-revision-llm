@@ -169,13 +169,44 @@ The full run uses the replicate and worker defaults in
 local files are updated after each complete primary cell, not after each remote
 request.
 
-## Modify the configured models
+## Select a target model
 
-Edit [`src/belief_revision/core/defaults.py`](src/belief_revision/core/defaults.py):
+Choose one of the eight [`configs/models/*.yaml`](configs/models/) profiles
+without editing global defaults:
 
-- `TARGET_MODEL` — target assistant being studied
-- `USER_SIM_MODEL` — simulated user
-- `EVALUATOR_MODEL` — behavioral evaluator
+```bash
+uv run python scripts/run_experiment.py --single-run --model-config configs/models/llama-3.1-8b-instruct.yaml
+# Model-ID alternative, with compatibility defaults:
+uv run python scripts/run_experiment.py --single-run --target-model Qwen/Qwen2.5-7B-Instruct
+```
+
+The matrix pairs Llama 8B/3B, Qwen 7B/3B, Gemma 12B/4B, and Ministral 8B/3B.
+For a run YAML under `configs/`, use:
+
+```yaml
+target:
+  model_config: models/llama-3.1-8b-instruct.yaml
+```
+
+Profile paths in run YAML are relative to that YAML; CLI target selection wins.
+The profile changes the target only. User and evaluator settings remain as
+configured; fallback values still live in
+[`core/defaults.py`](src/belief_revision/core/defaults.py). Each run records the
+requested profile and fingerprint in `run_manifest.json` (or
+`<csv-stem>.run_manifest.json` with explicit output paths).
+
+Pin `revision` to an exact commit before reproducible collection; all eight
+checked-in profiles currently use `main`. Profile dtype is requested precision,
+and NDIF does not enforce it. Backend/model compatibility still needs live
+verification; no infrastructure is provisioned by selecting a profile.
+
+Kati's extraction/probe tools accept `--model-config` and a fresh `--out` for
+new captures. Use `--activations-dir`/`--endorsement-dir` to analyze those outputs;
+cache provenance mismatches are refused. Torrey's standalone generator/extractor
+accept `--model-config`, and steering validates it against saved vector metadata.
+Q's notebook accepts an uploaded YAML through `MODEL_CONFIG_PATH`; leaving it
+empty preserves her Qwen-7B 4-bit default. See the
+[researcher execution steps](README.md#research-extensions) for complete commands.
 
 ## Validate configured NDIF models
 

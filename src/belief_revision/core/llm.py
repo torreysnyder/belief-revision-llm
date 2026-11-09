@@ -4,6 +4,13 @@ import os
 import time
 import random
 import anyio.streams.tls  # noqa: F401
+from .model_profiles import (
+    TargetModelProfile,
+    get_model_layers,
+    layer_output,
+    model_tokenizer,
+    prepare_profile_messages,
+)
 from .models import (
     ActivationCapture,
     ActivationCaptureRequest,
@@ -65,24 +72,33 @@ def require_ndif_key() -> None:
 
 
 @lru_cache(maxsize=None)
-def get_model(model_name: str) -> LanguageModel:
+def get_model(model_name: str, target_profile: TargetModelProfile | None = None) -> LanguageModel:
     """Create and cache one lightweight NDIF model handle per model ID."""
 
     require_ndif_key()
-    return LanguageModel(model_name)
+    if target_profile is None:
+        return LanguageModel(model_name)
+    if target_profile.model_id != model_name:
+        raise ValueError("target profile model_id does not match the requested model")
+    options = {"task": target_profile.task}
+    if target_profile.revision is not None:
+        options["revision"] = target_profile.revision
+    return LanguageModel(model_name, **options)
 
 
 def build_chat_prompt(
     model: LanguageModel,
     model_name: str,
     messages: list[dict[str, str]],
+    target_profile: TargetModelProfile | None = None,
 ) -> str:
     """Format messages using a native template or a base-model fallback."""
 
-    messages = prepare_messages_for_model(model_name, messages)
+    messages = prepare_profile_messages(messages, target_profile) if target_profile is not None else prepare_messages_for_model(model_name, messages)
+    tokenizer = model_tokenizer(model)
 
-    if model.tokenizer.chat_template:
-        prompt = model.tokenizer.apply_chat_template(
+    if tokenizer.chat_template:
+        prompt = tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True,
@@ -110,17 +126,19 @@ def generate_remote(
     temperature: float = 0.7,
     max_tokens: int = 500,
     capture_requests: tuple[ActivationCaptureRequest, ...] = (),
+    target_profile: TargetModelProfile | None = None,
 ) -> ModelGeneration:
     """Generate one response using a remotely hosted NDIF model."""
 
-    model = get_model(model_name)
-    prompt = build_chat_prompt(model, model_name, messages)
+    model = get_model(model_name, target_profile) if target_profile is not None else get_model(model_name)
+    tokenizer = model_tokenizer(model)
+    prompt = build_chat_prompt(model, model_name, messages, target_profile)
 
     # TEMPORARY FULL-FLOW SMOKE TEST: this deliberately overrides larger
     # per-call limits without changing the intended experiment settings.
     #    max_tokens = min(max_tokens, SMOKE_TEST_MAX_TOKENS)
 
-    prompt_length = model.tokenizer(
+    prompt_length = tokenizer(
         prompt,
         return_tensors="pt",
     ).input_ids.shape[-1]
@@ -133,7 +151,8 @@ def generate_remote(
     if temperature > 0:
         generation_options["temperature"] = temperature
 
-    layer_count = len(model.model.layers)
+    layers_collection = get_model_layers(model, target_profile) if target_profile is not None else model.model.layers
+    layer_count = len(layers_collection)
     capture_specs: list[tuple[ActivationCaptureRequest, int]] = []
     for request in capture_requests:
         layers = range(layer_count) if request.layers is None else request.layers
@@ -152,12 +171,14 @@ def generate_remote(
             saved_activations = nnsight_save([])
         for _ in tracer.iter[0]:
             for _, layer in capture_specs:
-                saved_activations.append(model.model.layers[layer].output[0, -1, :].float().detach().cpu())
+                output = layers_collection[layer].output
+                hidden = layer_output(output, target_profile) if target_profile is not None else output
+                saved_activations.append(hidden[0, -1, :].float().detach().cpu())
             output_tokens = tracer.result.save()
 
     generated_tokens = output_tokens[0, prompt_length:]
 
-    text = model.tokenizer.decode(
+    text = tokenizer.decode(
         generated_tokens,
         skip_special_tokens=True,
     ).strip()
@@ -216,9 +237,12 @@ def call_model(
     retries: int = 5,
     capture_requests: tuple[ActivationCaptureRequest, ...] = (),
     provider: str = "ndif",
+    target_profile: TargetModelProfile | None = None,
 ) -> ModelGeneration:
     """Route generation to NDIF or a configured chat-compatible API."""
 
+    if target_profile is not None and (provider != "ndif" or target_profile.model_id != model_name):
+        raise ValueError("target profile requires NDIF and a matching model_id")
     if provider != "ndif":
         if capture_requests:
             raise ValueError("activation capture is only supported through NDIF")
@@ -232,6 +256,7 @@ def call_model(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 capture_requests=capture_requests,
+                **({"target_profile": target_profile} if target_profile is not None else {}),
             )
         except Exception as error:
             if not is_retryable_error(error) or attempt == retries - 1:

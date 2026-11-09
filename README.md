@@ -89,9 +89,9 @@ be committed.
 uv run python scripts/run_experiment.py --single-run
 ```
 
-This runs one replicate from one primary cell and writes results locally. Model
-roles, replicate counts, and worker defaults are configured in
-`src/belief_revision/core/defaults.py`. Omit `--single-run` to run the full
+This runs one replicate from one primary cell and writes results locally. Fallback model roles, replicate counts, and worker defaults are configured in
+`src/belief_revision/core/defaults.py`. Select the target for one run with the
+profiles below; the user simulator and evaluator keep their existing settings. Omit `--single-run` to run the full
 configured experiment:
 
 ```bash
@@ -106,6 +106,8 @@ Each run writes to its own folder, so earlier runs are never overwritten:
 
 - `runs/<run-name>/results.csv`
 - `runs/<run-name>/dialogues.jsonl`
+- `runs/<run-name>/run_manifest.json` — requested target profile and fingerprint,
+  user model, evaluator settings, and output paths
 
 The run name defaults to the UTC start time plus the target model (for example
 `20261023-153012_llama-3.1-8b-instruct`, with `_single` appended for
@@ -117,6 +119,55 @@ explicit path replaces any file already there).
 These generated files are ignored by Git. `analysis_full_crossed.py` still reads
 `belief_revision_results_full_crossed.csv` from the repository root, so to analyze
 a run, copy its `results.csv` there or call `main(input_csv=...)` with its path.
+
+### Select the target model
+
+The eight files under [`configs/models/`](configs/models/) define the target
+matrix without changing the shared defaults:
+
+| Family | Main target profile | Lighter target profile |
+|---|---|---|
+| Llama (primary) | [3.1 8B](configs/models/llama-3.1-8b-instruct.yaml) | [3.2 3B](configs/models/llama-3.2-3b-instruct.yaml) |
+| Qwen | [2.5 7B](configs/models/qwen-2.5-7b-instruct.yaml) | [2.5 3B](configs/models/qwen-2.5-3b-instruct.yaml) |
+| Gemma | [3 12B](configs/models/gemma-3-12b-it.yaml) | [3 4B](configs/models/gemma-3-4b-it.yaml) |
+| Ministral | [3 8B](configs/models/ministral-3-8b-instruct.yaml) | [3 3B](configs/models/ministral-3-3b-instruct.yaml) |
+
+Select one profile for a run, or use a model ID with compatibility defaults:
+
+```bash
+uv run python scripts/run_experiment.py --single-run --model-config configs/models/llama-3.1-8b-instruct.yaml
+uv run python scripts/run_experiment.py --single-run --target-model Qwen/Qwen2.5-7B-Instruct
+```
+
+Alternatively, add this to a run configuration under `configs/`:
+
+```yaml
+target:
+  model_config: models/llama-3.1-8b-instruct.yaml
+```
+
+The YAML path is relative to the run configuration file. CLI `--model-config`
+or `--target-model` takes precedence; choose one, not both. `target.model_id`
+is the YAML alternative to `target.model_config`. Omitting target selection
+retains `TARGET_MODEL` from `core/defaults.py`; this does not select a different
+user simulator or evaluator. Explicit CSV output paths place the manifest at
+`<csv-stem>.run_manifest.json` beside that CSV.
+
+Profiles specify model ID/revision, requested dtype, Transformers loader and
+task, decoder/layer/head/normalization/logits paths, system-role handling, and
+assistant end-token/suffix handling. Layer counts and hidden width come from
+the loaded model rather than fixed Llama dimensions. An unfamiliar architecture
+needs a matching profile and validation; these known layouts are not universal
+model support.
+
+All eight checked-in revisions currently say `main`: pin an exact model commit
+before collecting reproducible data. Backend availability and actual loaded
+weight precision have not been verified for this matrix. In particular, NDIF
+does not enforce the profile's requested dtype; the run manifest records the
+requested configuration rather than proving backend precision.
+Local Torrey extraction/steering can override that request with `--dtype`;
+their metadata records the effective `forward_dtype`/`dtype` separately from
+the frozen requested profile.
 
 ### Optional Supabase reporting
 
@@ -181,32 +232,35 @@ Run these commands from the repository root after `uv sync`, except where a
 `cd` is shown. Registered live adapters use the repeatable `--extension` flag;
 Q's notebook and Kati's analysis tools run separately.
 
-Before model-backed work, check the global settings in
-[`src/belief_revision/core/defaults.py`](src/belief_revision/core/defaults.py):
-`TARGET_MODEL`, `USER_SIM_MODEL`, and evaluator provider/model. They currently
-select Qwen2.5-14B-Instruct, Llama-3.1-8B-Instruct, and OpenRouter
-`openai/gpt-4.1-mini`. Update settings to match the experiment being reproduced;
-model identities, layer counts, prompts, and checkpoint definitions must agree
-with saved data. Runner YAML profiles configure evaluation and extension capture;
-they do not override the target or simulated-user model. Standalone tools use
-the globals, notebook settings, or saved metadata described below.
+Use the target profiles above to select the studied assistant for each run.
+Shared fallback settings remain Qwen2.5-14B-Instruct for the target,
+Llama-3.1-8B-Instruct for the user simulator, and OpenRouter
+`openai/gpt-4.1-mini` for evaluation. Model identity, prompts, phases, and saved
+activation spaces must match; selecting a target leaves the user/evaluator roles
+unchanged. Each standalone workflow below accepts or carries the profile explicitly.
 
 #### Q / Qingqing: endorsement-score validation
 
 1. Open [`test_endorse_probe.ipynb`](src/belief_revision/extensions/qingqing/endorsement_validation/test_endorse_probe.ipynb)
    in Google Colab and select a CUDA GPU runtime.
 2. Follow its dependency-install and runtime-restart instructions. In the
-   configuration cell, review `MODEL_ID`, `PRECISION`, `USE_DRIVE`, `DATA_PATH`,
-   and `OUTPUT_ROOT`. The notebook uses its own model setting, currently
-   `Qwen/Qwen2.5-7B-Instruct` with `4bit` precision; changing repository globals
-   does not change it. Its shape checks assume the original 28-layer, 3584-wide model.
+   configuration cell, review `MODEL_CONFIG_PATH`, `MODEL_ID`, `PRECISION`,
+   `USE_DRIVE`, `DATA_PATH`, and `OUTPUT_ROOT`. To select a shared profile,
+   upload its YAML to Colab and set `MODEL_CONFIG_PATH` to the uploaded path.
+   The profile supplies model/revision/dtype and architecture settings; its dtype
+   selects unquantized `bf16`/`fp16`/`fp32` loading. Leave the path empty to retain
+   the notebook's existing Qwen2.5-7B `4bit` default. Repository globals do not
+   change notebook settings.
 3. Run the remaining cells in order. With `DATA_PATH = ""` and
    `LOAD_FROM_OSF = True`, it downloads the conversation CSV from OSF node
    `hs867`. Set `DATA_PATH` to use another supported CSV/JSON/JSONL input.
    With `USE_DRIVE = True`, authorize the Drive mount to persist outputs.
 
-The notebook loads the model on the Colab GPU and performs extraction and
-validation; it does not run the shared user simulator or API evaluator. Existing
+The notebook derives layer count and width from the loaded model, uses the
+configured decoder/head paths, and checks native final logits against the
+configured output-head transform, including logit softcapping where applicable.
+It loads the model on the Colab GPU and performs extraction and validation;
+it does not run the shared user simulator or API evaluator. Existing
 results are under
 [`endorsement_validation/extractions/`](src/belief_revision/extensions/qingqing/endorsement_validation/extractions/).
 There is no registered `--extension` adapter or script CLI for this notebook.
@@ -227,28 +281,34 @@ uv run python -m belief_revision.extensions.kati.decoding.decode --run runs/poli
 `activations/` tensors. The decoder uses `dialogues.jsonl` for its text baseline
 and writes `decoding/rerun.csv`.
 
-To create missing activations or endorsement measurements, first match the
-original `meta-llama/Llama-3.1-8B-Instruct` target, prompts, and phases in the
-shared core settings. The current global Qwen target is different. These scripts
-import `TARGET_MODEL` directly and have no `--model` or `--config` override.
+To create new activations or endorsement measurements, select a target profile
+explicitly. The following uses the original Llama-3.1-8B target independently of
+global defaults; prompts, phases, and source transcripts still need to match.
 With NDIF/Hugging Face access configured, these commands make model requests:
 
 ```bash
-uv run python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/politics03-llama8b-full
-uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --batch-size 4
+uv run python -m belief_revision.extensions.kati.decoding.extract_activations --run runs/politics03-llama8b-full --model-config configs/models/llama-3.1-8b-instruct.yaml --out runs/politics03-llama8b-full/activations-profile
+uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --model-config configs/models/llama-3.1-8b-instruct.yaml --out runs/politics03-llama8b-full/endorsement-profile --batch-size 4
 ```
 
-Existing `.pt` files are skipped by filename; changing the global target alone
-does not regenerate them. Use a separate run/output directory for changed model
-or extraction settings. `--dry-run` avoids NDIF execution but may download
-the tokenizer. Collect saved endorsement tensors and analyze them without new
-inference:
+Both tools also accept `--model MODEL_ID` instead of `--model-config`. New
+captures write `capture_manifest.json` and tensor identities covering the
+profile, requested layers, phases, prompt, source, and operation settings.
+Resuming a different configuration or an old directory without provenance is
+refused: choose a fresh `--out` directory. Existing legacy tensors remain
+readable for analysis. `--dry-run` avoids NDIF execution but may download a tokenizer.
+
+Use `--activations-dir` with `check_scale` or `decode`, and `--endorsement-dir`
+with `decode`, to analyze separate capture directories. For example:
 
 ```bash
-uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --collect
-uv run python -m belief_revision.extensions.kati.decoding.decode --run runs/politics03-llama8b-full --labels endorsement --out-name endorsement-rerun
+uv run python -m belief_revision.extensions.kati.decoding.endorsement_probe --run runs/politics03-llama8b-full --out runs/politics03-llama8b-full/endorsement-profile --collect
+uv run python -m belief_revision.extensions.kati.decoding.decode --run runs/politics03-llama8b-full --activations-dir runs/politics03-llama8b-full/activations-profile --endorsement-dir runs/politics03-llama8b-full/endorsement-profile --labels endorsement --out-name endorsement-rerun
 uv run python -m belief_revision.extensions.kati.results_summary.make_figures
 ```
+
+`--collect` only reads saved tensors; omit model-selection flags for that step.
+Label mapping and decoding methods retain their existing research definitions.
 
 Figure regeneration additionally requires the original early summary CSVs under
 `output_full_crossed/paper_v3/` and the named decoding CSVs `results.csv` and
@@ -263,46 +323,68 @@ live conversation adapter.
 #### Torrey: CAA capture and steering
 
 For activation capture during the shared experiment, review
-[`configs/torrey-caa.yaml`](configs/torrey-caa.yaml), then run:
+[`configs/torrey-caa.yaml`](configs/torrey-caa.yaml), then select a target:
 
 ```bash
 uv run python scripts/run_experiment.py \
   --single-run \
+  --model-config configs/models/llama-3.1-8b-instruct.yaml \
+  --run-name llama8b-pilot \
   --extension torrey-caa \
+  --torrey-caa-output-dir runs/llama8b-pilot/captures \
   --config configs/torrey-caa.yaml
 ```
 
-This runs live conversation generation and the configured evaluator, capturing
-the selected turns/layers into `activation_steering_pipeline/activations/live_captures/`.
+Choose an unused run name. This runs live conversation generation and the
+configured evaluator, writing the matching transcript to
+`runs/llama8b-pilot/dialogues.jsonl` and selected-turn/layer captures to
+`runs/llama8b-pilot/captures/`.
 Add `--reporting true` to upload completed records and activation artifacts.
 Hooks run in the order supplied on the command line.
 
-For the standalone pipeline, use its directory so relative data paths agree.
-Choose an unused `--run-name` for a fresh run; an existing name resumes outputs
-and may include previously saved judgments:
+The standalone generator and extractor also accept `--model-config`. The
+generator freezes the selected target and matching tokenizer into the pair
+manifest; extraction carries that profile into activation files; vector building
+preserves it; steering rejects a profile that differs from the frozen vectors.
+The profile selects the studied target, not the rewrite/user model.
+
+For a new selected-target pipeline, use the matching pilot transcript from the
+run above and separate output directories. The checked-in original pilot/pair
+manifest records Qwen2.5-0.5B; it cannot be reused as Llama data. Run from the
+pipeline directory so relative paths agree:
 
 ```bash
 cd activation_steering_pipeline
-uv run python generate_caa_contrastive_pairs.py --input data/pilot_original.jsonl --out-dir data
-uv run python extract_caa_activations.py
-uv run python build_caa_vectors.py
-uv run python activation_steering.py --stages generate summarize --run-name development-no-judge
+model_config=../configs/models/llama-3.1-8b-instruct.yaml
+pair_dir=data/llama8b-profile
+activation_dir=activations/llama8b-profile
+vector_dir=vectors/llama8b-profile
+result_dir=results/llama8b-profile
+uv run python generate_caa_contrastive_pairs.py --input ../runs/llama8b-pilot/dialogues.jsonl --out-dir "$pair_dir" --model-config "$model_config"
+uv run python extract_caa_activations.py --model-config "$model_config" \
+  --core-pairs "$pair_dir/caa_pairs_core.jsonl" --auxiliary-pairs "$pair_dir/caa_pairs_auxiliary.jsonl" \
+  --pair-manifest "$pair_dir/caa_pairs_manifest.json" --split-manifest "$pair_dir/caa_split_manifest.json" --out-dir "$activation_dir"
+uv run python build_caa_vectors.py --activations-dir "$activation_dir" \
+  --split-manifest "$pair_dir/caa_split_manifest.json" --vector-dir "$vector_dir" --results-dir "$result_dir"
+uv run python activation_steering.py --model-config "$model_config" \
+  --vector-dir "$vector_dir" --diagnostics "$result_dir/vector_diagnostics.csv" \
+  --core-pairs "$pair_dir/caa_pairs_core.jsonl" --auxiliary-pairs "$pair_dir/caa_pairs_auxiliary.jsonl" \
+  --split-manifest "$pair_dir/caa_split_manifest.json" --results-dir "$result_dir/steering" \
+  --stages generate summarize --run-name development-no-judge
 cd ..
 ```
 
-These steps require the original pilot records and their cache/metadata. Pair
-generation uses NDIF through the core; standalone extraction and steering load
-models locally and require suitable GPU memory. For gated models, export
-`HF_TOKEN` in the shell or use an existing Hugging Face login; these two scripts
-do not load `.env`. Match the model before running: the checked-in pair manifest records
-`Qwen/Qwen2.5-0.5B-Instruct`, unlike the current shared 14B target. The generator
-uses global `TARGET_MODEL` and its `--tokenizer` setting, extraction reads pair
-metadata (or `--model`), and steering reads vector metadata.
+Choose unused output directories and a fresh `--run-name`; existing names resume
+outputs and can include previous judgments. Pair generation needs its source
+pilot and NDIF access; standalone extraction and steering load models locally
+and need suitable GPU memory. For gated models, export `HF_TOKEN` in the shell
+or use an existing Hugging Face login; these two scripts do not load `.env`.
+Use an environment that provides the profile's Transformers loader.
 
-The final command deliberately runs generation and summary only. The standalone
-judge stage still imports the unavailable `belief_revision_experiment_qwen`
-module in `activation_steering.py`; the default full pipeline is blocked there,
-and this command produces no fresh judge-based belief scores. See the
+The final command runs generation and summary only. The standalone judge stage
+still imports the unavailable `belief_revision_experiment_qwen` module;
+target profiles do not repair that stage. This command produces no fresh
+judge-based belief scores. See the
 [pipeline notes](activation_steering_pipeline/README_controlled_counterfactual_CAA.md)
 for individual stages and an offline pair-building smoke check.
 
