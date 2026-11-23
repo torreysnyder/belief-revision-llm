@@ -1,49 +1,13 @@
-"""
-Extracts pair-level residual-stream activations for the Core / Auxiliary CAA
-experiment (README_controlled_counterfactual_CAA.md, section 7).
+"""Extract paired residual activations from Qwen2.5-7B BASE QC v4 CAA pairs.
 
-For every hard-QC-passing pair in
+Defaults to NDIF remote forward tracing (no local 7B weights). --backend local
+is available when local model weights and sufficient VRAM exist.
+Uses the exact plain-text System/User/Assistant prompt format and
+add_special_tokens=False from the QC v4 behavioral experiment.
 
-  data/caa_pairs_core.jsonl
-  data/caa_pairs_auxiliary.jsonl
-
-both branches (experimental_prompt, control_prompt) are rendered with the frozen
-Qwen chat template exactly as the behavioral run did (apply_chat_template with
-add_generation_prompt=True, then the tokenizer's default call), verified against
-the stored pair records, and run through Qwen in a deterministic forward pass.
-
-Activation definition (the only one used for the first analysis):
-
-  activation_location : output of transformer block l, i.e. the residual stream
-                        after block l's attention and MLP residual additions,
-                        captured with a forward hook on decoder.layers[l]. For
-                        l < n_layers-1 this equals HF hidden_states[l+1]; for the
-                        last block it is the value *before* the final RMSNorm.
-  token_position      : final_prompt_token, the last token of the rendered
-                        prompt (the end of the "<|im_start|>assistant\\n"
-                        generation prompt), immediately before generation.
-
-Other positions (evidence-token mean pooling, final evidence token, response
-tokens, semantic spans) plug into TOKEN_POSITIONS; none are enabled yet.
-
-The train / validation / test split is assigned per conversation and frozen in
-data/caa_split_manifest.json. If that file does not exist it is created once;
-afterwards it is only read, and the run aborts if it fails to cover a pair.
-
-This script does NOT build CAA vectors (that is build_caa_vectors.py). It writes:
-
-  activations/core_activations.pt
-  activations/auxiliary_activations.pt
-  activations/activation_manifest.json
-
-Each .pt file holds pair-level metadata (no prompt text; it links back to the
-pair JSONLs via pair_id / source_state_id) and three aligned float tensors of
-shape [n_pairs, n_layers, hidden_dim]: experimental_activation,
-control_activation and pair_difference (= experimental - control).
-
-Usage:
-  python extract_caa_activations.py --limit 4 --out-dir activations_smoke   # smoke test
-  python extract_caa_activations.py                                         # full extraction
+Example:
+ python -u extract_caa_activations_qwen7b_qcv4.py --limit 2 --out-dir activations/smoke
+ python -u extract_caa_activations_qwen7b_qcv4.py
 """
 
 import os
@@ -53,24 +17,28 @@ os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 import sys
 import json
-import torch
 import random
 import hashlib
 import argparse
 import platform
-import transformers
+import time
+import tempfile
+import socket
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime, timezone
+
+import torch
+import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-DEFAULT_CORE_PAIRS = "data/caa_pairs_core.jsonl"
-DEFAULT_AUX_PAIRS = "data/caa_pairs_auxiliary.jsonl"
-DEFAULT_PAIR_MANIFEST = "data/caa_pairs_manifest.json"
-DEFAULT_SPLIT_MANIFEST = "data/caa_split_manifest.json"
-DEFAULT_OUT_DIR = "activations"
-FALLBACK_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+DEFAULT_CORE_PAIRS = "data/caa_qwen7b_openrouter_qc_v4/caa_pairs_core.jsonl"
+DEFAULT_AUX_PAIRS = "data/caa_qwen7b_openrouter_qc_v4/caa_pairs_auxiliary.jsonl"
+DEFAULT_PAIR_MANIFEST = "data/caa_qwen7b_openrouter_qc_v4/caa_pairs_manifest.json"
+DEFAULT_SPLIT_MANIFEST = "data/caa_qwen7b_openrouter_qc_v4/caa_split_manifest_by_vignette.json"
+DEFAULT_OUT_DIR = "activations/caa_qwen7b_openrouter_qc_v4"
+FALLBACK_MODEL = "Qwen/Qwen2.5-7B"
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 ACTIVATION_LOCATION = (
     "decoder_block_output: residual stream after transformer block l "
@@ -81,8 +49,7 @@ ACTIVATION_LOCATION = (
 
 SPLITS = ["train", "validation", "test"]
 DEFAULT_FRACTIONS = (0.70, 0.15, 0.15)
-DEFAULT_STRATIFICATION = ["style_id", "belief_anchor_level", "conversation_goal",
-                          "trust_in_institutions", "aux_order_condition"]
+DEFAULT_STRATIFICATION = ["domain"]
 
 DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
 
@@ -150,77 +117,75 @@ def set_determinism(seed):
 
 
 # ---------------------------------------------------------------------------
-# 7.2 frozen conversation-level split
+# 7.2 frozen vignette-level split (all conversations for a vignette stay together)
 # ---------------------------------------------------------------------------
-def conversation_factors(pairs, strat_vars):
-    convs = OrderedDict()
+def vignette_factors(pairs, strat_vars):
+    groups = OrderedDict()
     for p in pairs:
-        cid = p["conversation_id"]
-        if cid not in convs:
-            convs[cid] = {v: p.get(v) for v in strat_vars}
-            convs[cid]["cell_id"] = p.get("cell_id")
-    return convs
+        vid = p["vignette_id"]
+        if vid not in groups:
+            groups[vid] = {v: p.get(v) for v in strat_vars}
+        elif any(groups[vid][v] != p.get(v) for v in strat_vars):
+            raise ValueError(f"Inconsistent vignette-level stratification metadata for {vid}")
+    return groups
 
 
-def create_split(convs, seed, fractions, strat_vars):
-    """Systematic allocation over a stratification-sorted list: conversations are
-    ordered by the stratification variables (within-stratum order randomised),
-    then each is given to the split furthest below its target share so far. Every
-    stratum, and every prefix of the sort hierarchy, therefore gets close to the
-    target fractions."""
+def create_split(groups, seed, fractions, strat_vars):
+    """Allocate whole vignettes, stratified on vignette-invariant variables."""
     rng = random.Random(seed)
     strata = defaultdict(list)
-    for cid, f in convs.items():
-        strata[tuple(str(f.get(v)) for v in strat_vars)].append(cid)
+    for vid, factors in groups.items():
+        strata[tuple(str(factors.get(v)) for v in strat_vars)].append(vid)
     ordered = []
     for key in sorted(strata):
         members = sorted(strata[key])
         rng.shuffle(members)
         ordered.extend(members)
-
-    counts = {s: 0 for s in SPLITS}
+    counts = {split: 0 for split in SPLITS}
     assignment = {}
-    for n, cid in enumerate(ordered, 1):
-        deficits = [(fractions[i] * n - counts[s], -i) for i, s in enumerate(SPLITS)]
+    for n, vid in enumerate(ordered, 1):
+        deficits = [(fractions[i] * n - counts[split], -i) for i, split in enumerate(SPLITS)]
         split = SPLITS[-max(deficits)[1]]
-        assignment[cid] = split
+        assignment[vid] = split
         counts[split] += 1
     return assignment
 
 
-def split_balance(assignment, convs, strat_vars):
+def split_balance(assignment, groups, strat_vars):
     table = {}
-    for v in strat_vars:
-        t = defaultdict(Counter)
-        for cid, split in assignment.items():
-            t[str(convs[cid].get(v))][split] += 1
-        table[v] = {level: dict(c) for level, c in sorted(t.items())}
+    for var in strat_vars:
+        counts = defaultdict(Counter)
+        for vid, split in assignment.items():
+            counts[str(groups[vid].get(var))][split] += 1
+        table[var] = {level: dict(c) for level, c in sorted(counts.items())}
     return table
 
 
 def load_or_create_split(path, all_pairs, seed, fractions, strat_vars, input_hashes):
-    convs = conversation_factors(all_pairs, strat_vars)
+    groups = vignette_factors(all_pairs, strat_vars)
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
+        if manifest.get("split_unit") != "vignette_id":
+            sys.exit(f"ERROR: {path} is not a vignette-level split. Use a new --split-manifest path.")
         mapping = manifest["assignments"]
-        missing = [c for c in convs if c not in mapping]
+        missing = [vid for vid in groups if vid not in mapping]
         if missing:
-            sys.exit(f"ERROR: {len(missing)} conversation(s) are not in the frozen split {path} "
-                     f"(e.g. {missing[0]}). The split is never extended silently; create a new "
-                     f"split manifest deliberately if the pair data changed.")
-        bad = sorted({s for s in mapping.values() if s not in SPLITS})
+            sys.exit(f"ERROR: {len(missing)} vignette(s) missing from frozen split {path}, e.g. {missing[0]}.")
+        bad = sorted({mapping[vid] for vid in groups if mapping[vid] not in SPLITS})
         if bad:
-            sys.exit(f"ERROR: unknown split label(s) {bad} in {path}.")
-        print(f"Using frozen split {path} ({Counter(mapping.values())})")
+            sys.exit(f"ERROR: invalid split labels: {bad}")
+        if manifest.get("source_pair_files") != input_hashes:
+            sys.exit("ERROR: pair input hashes differ from the frozen split manifest. "
+                     "Use the original pair data or deliberately create a new split manifest.")
+        print(f"Using frozen vignette split {path} ({Counter(mapping.values())})")
         return mapping, manifest, False
 
-    mapping = create_split(convs, seed, fractions, strat_vars)
+    mapping = create_split(groups, seed, fractions, strat_vars)
     manifest = {
         "split_seed": seed,
-        "split_method": "conversation-level systematic allocation over a stratification-sorted list "
-                        "(within-stratum order randomised with split_seed)",
-        "split_unit": "conversation_id",
+        "split_method": "vignette-level systematic allocation, stratified by vignette-invariant factors",
+        "split_unit": "vignette_id",
         "train_fraction": fractions[0],
         "validation_fraction": fractions[1],
         "test_fraction": fractions[2],
@@ -228,14 +193,15 @@ def load_or_create_split(path, all_pairs, seed, fractions, strat_vars, input_has
         "creation_timestamp": datetime.now(timezone.utc).isoformat(),
         "created_by": os.path.basename(__file__),
         "source_pair_files": input_hashes,
-        "n_conversations": len(mapping),
+        "n_vignettes": len(mapping),
+        "n_conversations": len({p["conversation_id"] for p in all_pairs}),
         "split_counts": dict(Counter(mapping.values())),
-        "balance_by_variable": split_balance(mapping, convs, strat_vars),
+        "balance_by_variable": split_balance(mapping, groups, strat_vars),
         "assignments": dict(sorted(mapping.items())),
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
-    print(f"Created and froze split {path} ({manifest['split_counts']})")
+    print(f"Created and froze vignette split {path} ({manifest['split_counts']})")
     return mapping, manifest, True
 
 
@@ -275,12 +241,15 @@ def decoder_layers(model):
 # 7.3 prompt reconstruction + verification
 # ---------------------------------------------------------------------------
 def render(tok, messages, generation_prompt=True):
-    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=generation_prompt)
+    # Exact QC v4 base-model transcript (not ChatML / Instruct template).
+    names = {"system": "System", "user": "User", "assistant": "Assistant"}
+    body = "\n\n".join(f"{names[m['role']]}: {m['content']}" for m in messages)
+    return body + ("\n\nAssistant:" if generation_prompt else "")
 
 
 def tokenize(tok, text):
     # Same call the behavioral run used: tokenizer(prompt) with default special-token handling.
-    return tok(text)["input_ids"]
+    return tok(text, add_special_tokens=False)["input_ids"]
 
 
 def message_problems(messages):
@@ -312,7 +281,7 @@ def prepare_pair(tok, pair, position_name):
     checks["experimental_render_matches_stored"] = None if stored_exp is None else exp_text == stored_exp
     checks["control_render_matches_stored"] = None if stored_ctrl is None else ctrl_text == stored_ctrl
 
-    parent = render(tok, exp_msgs[:-1], generation_prompt=False)
+    parent = render(tok, exp_msgs[:-1], generation_prompt=False) + "\n\n"
     checks["parent_prefix_match"] = exp_text.startswith(parent) and ctrl_text.startswith(parent)
     exp_nogen, ctrl_nogen = render(tok, exp_msgs, False), render(tok, ctrl_msgs, False)
     gen_tail = exp_text[len(exp_nogen):]
@@ -328,8 +297,13 @@ def prepare_pair(tok, pair, position_name):
             break
         shared += 1
     parent_len = len(tokenize(tok, parent))
-    checks["parent_tokens_identical"] = shared >= parent_len
+    # Tokenization can merge characters across a boundary; do not assume the
+    # tokenized parent string is necessarily an exact token prefix.
+    checks["parent_tokens_identical"] = None
     checks["final_token_ids_equal"] = exp_ids[-1] == ctrl_ids[-1]
+    checks["expected_base_prompt_format"] = pair.get("target_prompt_format") in (None, "qwen2.5-7b-base_plain_role_transcript")
+    checks["experimental_stored_not_chatml"] = not (stored_exp or "").startswith("<|im_start|>")
+    checks["control_stored_not_chatml"] = not (stored_ctrl or "").startswith("<|im_start|>")
 
     position_fn = TOKEN_POSITIONS[position_name]
     exp_pos, ctrl_pos = position_fn(exp_ids, pair, "experimental"), position_fn(ctrl_ids, pair, "control")
@@ -415,8 +389,8 @@ def self_check(model, decoder, capture, prompt, device):
     hs = out.hidden_states
     n = hooked.shape[0]
     max_diff = 0.0
-    for layer_index in range(n - 1):
-        max_diff = max(max_diff, (hooked[layer_index] - hs[layer_index + 1][0, pos].float().cpu()).abs().max().item())
+    for l in range(n - 1):
+        max_diff = max(max_diff, (hooked[l] - hs[l + 1][0, pos].float().cpu()).abs().max().item())
     result = {"n_hidden_states": len(hs), "n_layers": n, "max_abs_diff_block_vs_hidden_states": max_diff}
     norm = getattr(decoder, "norm", None)
     if norm is not None:
@@ -426,6 +400,162 @@ def self_check(model, decoder, capture, prompt, device):
     tol = 1e-3 if hs[0].dtype == torch.float32 else 5e-2
     result["passed"] = len(hs) == n + 1 and max_diff <= tol and result.get("max_abs_diff_final_norm", 0.0) <= tol
     return result
+
+
+# ---------------------------------------------------------------------------
+# NDIF remote forward tracing: one prompt per invocation, no local model weights.
+# ---------------------------------------------------------------------------
+def _transient_ndif_error(exc):
+    """Retry transport/service errors, not programming errors or OOM."""
+    if isinstance(exc, (TimeoutError, ConnectionError, socket.timeout)):
+        return True
+    try:
+        from websocket import WebSocketBadStatusException, WebSocketTimeoutException, WebSocketConnectionClosedException
+        if isinstance(exc, (WebSocketTimeoutException, WebSocketConnectionClosedException)):
+            return True
+        if isinstance(exc, WebSocketBadStatusException):
+            return getattr(exc, "status_code", None) in (429, 500, 502, 503, 504)
+    except ImportError:
+        pass
+    msg = str(exc).lower()
+    # Some NNsight versions wrap the underlying transport exception.
+    return any(x in msg for x in (
+        "502 bad gateway", "503 service unavailable", "504 gateway timeout",
+        "429 too many requests", "connection timed out", "timed out",
+        "winerror 10060", "connection reset", "connection refused",
+        "websocket connection is closed", "websocketbadstatusexception",
+        "temporarily unavailable", "remote disconnected",
+    )) and not any(x in msg for x in ("cuda out of memory", "outofmemoryerror", "indexerror", "unboundlocalerror"))
+
+
+def _checkpoint_identity(model_name, model_revision, key, prompt, n_layers, hidden_dim):
+    """Content-addressed identity; incompatible model/token positions cannot be reused."""
+    return {
+        "schema": 1,
+        "model": model_name,
+        "revision": model_revision,
+        "activation_location": "decoder_block_output_pre_final_norm",
+        "key": [key[0], list(key[1])],
+        "input_ids_sha256": hashlib.sha256(json.dumps(prompt["ids"], separators=(",", ":")).encode()).hexdigest(),
+        "positions": list(prompt["positions"]),
+        "n_layers": n_layers,
+        "hidden_dim": hidden_dim,
+    }
+
+
+def _checkpoint_path(directory, identity):
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return os.path.join(directory, digest[:2], digest + ".pt")
+
+
+def _validated_activation(value, n_layers, hidden_dim):
+    if not isinstance(value, torch.Tensor):
+        raise ValueError("Checkpoint/NDIF result is not a tensor")
+    value = value.detach().to(device="cpu", dtype=torch.float32).contiguous()
+    if tuple(value.shape) != (n_layers, hidden_dim):
+        raise ValueError(f"Unexpected activation shape: {tuple(value.shape)}")
+    if not bool(torch.isfinite(value).all()):
+        raise ValueError("Activation contains NaN or Inf")
+    return value
+
+
+def _load_checkpoint(path, identity, n_layers, hidden_dim):
+    if not os.path.isfile(path):
+        return None
+    try:
+        # weights_only avoids arbitrary object unpickling from checkpoint files.
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+        if payload.get("identity") != identity:
+            raise ValueError("checkpoint identity mismatch")
+        return _validated_activation(payload["activation"], n_layers, hidden_dim)
+    except (OSError, EOFError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+        print(f"WARNING: ignoring invalid checkpoint {path}: {exc}", flush=True)
+        return None
+
+
+def _save_checkpoint(path, identity, activation):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".pending_", suffix=".pt", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            torch.save({"identity": identity, "activation": activation}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_path, path)  # atomic replacement on the same filesystem
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+def _ndif_one_prompt(wrapper, prompt, n_layers, hidden_dim):
+    import nnsight
+    ids = torch.tensor([prompt["ids"]], dtype=torch.long)
+    positions = prompt["positions"]
+    # One remote-saved container: external list mutation does not survive tracing.
+    with wrapper.trace(ids, remote=True):
+        layer_vectors = nnsight.save([
+            wrapper.model.layers[l].output[:, positions, :]
+            .mean(dim=1).detach().float().cpu()
+            for l in range(n_layers)
+        ])
+    if len(layer_vectors) != n_layers:
+        raise ValueError(f"NDIF returned {len(layer_vectors)} of {n_layers} layers")
+    act = torch.stack([v.detach().float().cpu().reshape(-1) for v in layer_vectors], dim=0)
+    return _validated_activation(act, n_layers, hidden_dim)
+
+
+def run_ndif_prompts(model_name, prompts, n_layers, hidden_dim, *, model_revision=None,
+                     checkpoint_dir=None, max_attempts=6, retry_base=5.0,
+                     retry_max_delay=120.0):
+    """Retry transient failures and atomically checkpoint every successful prompt.
+
+    Checkpoints are loaded before any NDIF initialization, so a fully cached run
+    needs no network connection. Outputs retain the original dict interface.
+    """
+    if max_attempts < 1 or retry_base < 0 or retry_max_delay < 0:
+        raise ValueError("Invalid retry configuration")
+    if checkpoint_dir is None:
+        raise ValueError("checkpoint_dir is required for resumable NDIF extraction")
+    results, pending = {}, []
+    for key, prompt in prompts.items():
+        identity = _checkpoint_identity(model_name, model_revision, key, prompt, n_layers, hidden_dim)
+        path = _checkpoint_path(checkpoint_dir, identity)
+        cached = _load_checkpoint(path, identity, n_layers, hidden_dim)
+        if cached is not None:
+            results[key] = cached
+        else:
+            pending.append((key, prompt, identity, path))
+    print(f"NDIF checkpoints: {len(results)} reused, {len(pending)} pending "
+          f"(directory: {checkpoint_dir})", flush=True)
+    if not pending:
+        return results
+
+    from nnsight import LanguageModel
+    wrapper = LanguageModel(model_name, dispatch=False)
+    if getattr(wrapper, "dispatched", False):
+        raise RuntimeError("NDIF wrapper unexpectedly dispatched weights locally")
+    for i, (key, prompt, identity, path) in enumerate(pending, 1):
+        for attempt in range(1, max_attempts + 1):
+            try:
+                act = _ndif_one_prompt(wrapper, prompt, n_layers, hidden_dim)
+                _save_checkpoint(path, identity, act)
+                results[key] = act
+                break
+            except Exception as exc:
+                if not _transient_ndif_error(exc) or attempt == max_attempts:
+                    print(f"NDIF prompt {i}/{len(pending)} failed on attempt "
+                          f"{attempt}/{max_attempts}: {type(exc).__name__}: {exc}", flush=True)
+                    raise
+                delay = min(retry_max_delay, retry_base * 2 ** (attempt - 1))
+                delay += random.uniform(0, min(3.0, retry_max_delay / 10))
+                print(f"Transient NDIF error on prompt {i}/{len(pending)}, "
+                      f"attempt {attempt}/{max_attempts}: {type(exc).__name__}: {exc}. "
+                      f"Retry in {delay:.1f}s", flush=True)
+                time.sleep(delay)
+        if i % 10 == 0 or i == len(pending):
+            print(f"  NDIF completed: {len(results)}/{len(prompts)} "
+                  f"({i}/{len(pending)} new)", flush=True)
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -485,8 +615,15 @@ def main():
     ap.add_argument("--split-manifest", default=DEFAULT_SPLIT_MANIFEST)
     ap.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     ap.add_argument("--model", default=None, help="defaults to target_model in the pair manifest")
+    ap.add_argument("--checkpoint-dir", default=None,
+                    help="NDIF per-prompt checkpoints; default <out-dir>/ndif_checkpoints")
+    ap.add_argument("--ndif-max-attempts", type=int, default=6)
+    ap.add_argument("--ndif-retry-base", type=float, default=5.0, help="initial backoff seconds")
+    ap.add_argument("--ndif-retry-max-delay", type=float, default=120.0)
+    ap.add_argument("--backend", choices=["ndif", "local"], default="ndif",
+                    help="NDIF remote Qwen (default) or locally loaded Hugging Face weights")
     ap.add_argument("--model-revision", default=None, help="commit hash to pin; default resolves 'main' once and records it")
-    ap.add_argument("--dtype", default="float32", choices=sorted(DTYPES),
+    ap.add_argument("--dtype", default="bfloat16", choices=sorted(DTYPES),
                     help="forward-pass dtype (behavioral run used bfloat16 on CUDA)")
     ap.add_argument("--save-dtype", default="float32", choices=sorted(DTYPES))
     ap.add_argument("--attn-implementation", default=None, help="e.g. eager or sdpa; default = library default")
@@ -510,6 +647,7 @@ def main():
     if abs(sum(args.split_fractions) - 1.0) > 1e-6:
         sys.exit("ERROR: --split-fractions must sum to 1.")
     os.makedirs(args.out_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.split_manifest)), exist_ok=True)
     out_paths = {
         "core": os.path.join(args.out_dir, "core_activations.pt"),
         "auxiliary": os.path.join(args.out_dir, "auxiliary_activations.pt"),
@@ -533,18 +671,39 @@ def main():
         if dup:
             sys.exit(f"ERROR: duplicate pair_id in {inputs[t]} (e.g. {dup[0]}).")
     all_pairs = pairs_by_type["core"] + pairs_by_type["auxiliary"]
+    if not all_pairs:
+        sys.exit("ERROR: no contrastive pairs found in the input files.")
+    if any(not p.get("vignette_id") for p in all_pairs):
+        sys.exit("ERROR: at least one pair is missing vignette_id.")
 
-    # The split covers every conversation in the pair data, independent of QC.
+    # The split covers every vignette in the pair data, independent of QC.
     split_map, split_manifest, split_created = load_or_create_split(
         args.split_manifest, all_pairs, args.split_seed, tuple(args.split_fractions),
         args.stratify, input_hashes)
 
     model_name = args.model or default_model_name(args.pair_manifest)
-    print(f"Loading {model_name} ({args.dtype}) on {args.device} ...")
-    model, tok, model_revision = load_model_and_tokenizer(
-        model_name, args.model_revision, args.dtype, args.device, args.attn_implementation)
-    decoder, layers = decoder_layers(model)
-    n_layers, hidden_dim = len(layers), model.config.hidden_size
+    if model_name != "Qwen/Qwen2.5-7B":
+        sys.exit(f"ERROR: expected the exact QC v4 base checkpoint Qwen/Qwen2.5-7B, got {model_name!r}.")
+    print(f"Preparing {model_name} ({args.dtype}) using {args.backend} ...")
+    if args.backend == "local":
+        model, tok, model_revision = load_model_and_tokenizer(
+            model_name, args.model_revision, args.dtype, args.device, args.attn_implementation)
+        decoder, layers = decoder_layers(model)
+        n_layers, hidden_dim = len(layers), model.config.hidden_size
+    else:
+        from transformers import AutoConfig
+        tok = AutoTokenizer.from_pretrained(model_name, revision=args.model_revision)
+        cfg = AutoConfig.from_pretrained(model_name, revision=args.model_revision)
+        n_layers, hidden_dim = cfg.num_hidden_layers, cfg.hidden_size
+        model_revision = getattr(cfg, "_commit_hash", None) or args.model_revision
+        model = decoder = layers = None
+        if not os.environ.get("NDIF_API_KEY"):
+            from dotenv import load_dotenv
+            load_dotenv()
+        if not os.environ.get("NDIF_API_KEY"):
+            sys.exit("ERROR: NDIF_API_KEY not set. Set it in the environment or .env.")
+    if (n_layers, hidden_dim) != (28, 3584):
+        sys.exit(f"ERROR: unexpected Qwen2.5-7B dimensions: {n_layers} layers, {hidden_dim} hidden.")
     chat_template = tok.chat_template or ""
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
     print(f"Model revision {model_revision} | {n_layers} layers x {hidden_dim} | "
@@ -589,16 +748,23 @@ def main():
                 unique.setdefault(key, {"ids": b["ids"], "positions": b["positions"]})
     print(f"Running {len(unique)} unique prompts (batch size {args.batch_size}) ...")
 
-    capture = BlockOutputCapture(layers)
     check = None
-    if unique:
-        check = self_check(model, decoder, capture, next(iter(unique.values())), args.device)
-        print(f"Hook self-check: {check}")
-        if not check["passed"]:
-            sys.exit("ERROR: hooked block outputs do not match hidden_states; activation_location "
-                     "would be mislabelled. Check the transformers version / model architecture.")
-    acts = run_batches(model, decoder, capture, unique, pad_id, args.device, args.batch_size)
-    capture.remove()
+    if args.backend == "local":
+        capture = BlockOutputCapture(layers)
+        if unique:
+            check = self_check(model, decoder, capture, next(iter(unique.values())), args.device)
+            print(f"Hook self-check: {check}")
+            if not check["passed"]:
+                sys.exit("ERROR: hooked block outputs failed self-check.")
+        acts = run_batches(model, decoder, capture, unique, pad_id, args.device, args.batch_size)
+        capture.remove()
+    else:
+        checkpoint_dir = args.checkpoint_dir or os.path.join(args.out_dir, "ndif_checkpoints")
+        acts = run_ndif_prompts(
+            model_name, unique, n_layers, hidden_dim,
+            model_revision=model_revision, checkpoint_dir=checkpoint_dir,
+            max_attempts=args.ndif_max_attempts, retry_base=args.ndif_retry_base,
+            retry_max_delay=args.ndif_retry_max_delay)
 
     timestamp = datetime.now(timezone.utc).isoformat()
     script_sha = sha256_file(__file__)
@@ -615,7 +781,12 @@ def main():
         ("hidden_dim", hidden_dim),
         ("forward_dtype", args.dtype),
         ("activation_dtype", args.save_dtype),
-        ("chat_template_hash", sha256_text(chat_template)),
+        ("chat_template_hash", None),
+        ("prompt_format", "qwen2.5-7b-base_plain_role_transcript"),
+        ("tokenization", "add_special_tokens=False"),
+        ("backend", args.backend),
+        ("ndif_checkpoint_dir", (args.checkpoint_dir or os.path.join(args.out_dir, "ndif_checkpoints")) if args.backend == "ndif" else None),
+        ("ndif_max_attempts", args.ndif_max_attempts if args.backend == "ndif" else None),
         ("extraction_script", os.path.basename(__file__)),
         ("extraction_script_version", script_sha),
         ("extraction_timestamp", timestamp),
@@ -629,7 +800,7 @@ def main():
         for p, prep in prepared:
             exp_key = (sha256_text(prep["experimental"]["text"]), tuple(prep["experimental"]["positions"]))
             ctrl_key = (sha256_text(prep["control"]["text"]), tuple(prep["control"]["positions"]))
-            metas.append(pair_metadata(p, split_map[p["conversation_id"]], prep, tok, args.token_position))
+            metas.append(pair_metadata(p, split_map[p["vignette_id"]], prep, tok, args.token_position))
             exp_rows.append(acts[exp_key])
             ctrl_rows.append(acts[ctrl_key])
         if exp_rows:
@@ -684,13 +855,13 @@ def main():
         ("device", args.device),
         ("batch_size", args.batch_size),
         ("padding_side", "right"),
-        ("attn_implementation", getattr(model.config, "_attn_implementation", None)),
+        ("attn_implementation", getattr(model.config, "_attn_implementation", None) if model is not None else "NDIF remote"),
         ("deterministic_algorithms", torch.are_deterministic_algorithms_enabled()),
         ("seed", args.seed),
         ("torch_version", torch.__version__),
         ("transformers_version", transformers.__version__),
         ("python_version", platform.python_version()),
-        ("cuda_device", torch.cuda.get_device_name(0) if args.device.startswith("cuda") else None),
+        ("cuda_device", torch.cuda.get_device_name(0) if args.backend == "local" and args.device.startswith("cuda") else None),
         ("output_files", output_hashes),
     ])
     with open(manifest_path, "w", encoding="utf-8") as f:

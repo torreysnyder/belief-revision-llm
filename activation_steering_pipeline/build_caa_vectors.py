@@ -1,13 +1,15 @@
 """
 Builds the paired Core / Auxiliary CAA vectors from the frozen activation
 dataset (README_controlled_counterfactual_CAA.md, sections 7.8, 8 and 9).
+Compatible with the Qwen2.5-7B BASE / NDIF / OpenRouter QC v4 pipeline.
+Consumes completed activation .pt files, not NDIF per-prompt checkpoints.
 
 Inputs (written by extract_caa_activations.py; Qwen is not rerun):
 
-  activations/core_activations.pt
-  activations/auxiliary_activations.pt
-  activations/activation_manifest.json
-  data/caa_split_manifest.json            (hash-checked against the activations)
+  activations/caa_qwen7b_openrouter_qc_v4/core_activations.pt
+  activations/caa_qwen7b_openrouter_qc_v4/auxiliary_activations.pt
+  activations/caa_qwen7b_openrouter_qc_v4/activation_manifest.json
+  data/caa_qwen7b_openrouter_qc_v4/caa_split_manifest_by_vignette.json            (hash-checked against the activations)
 
 Vector definition (section 8), computed on the TRAIN split only:
 
@@ -39,17 +41,17 @@ per contrast x control_type x layer:
     (chance = 0.5), the standardized mean projection, and the same test on the
     other contrast family (Core vector on Auxiliary pairs and vice versa)
 
-Resampling is done at the conversation level, the same unit as the frozen split,
-because pairs from the same conversation are not independent.
+Resampling is done at the vignette level, the same unit as the frozen split,
+because both goals and multiple pairs for one vignette are not independent.
 
 The TEST split is dropped immediately after loading and is never used here.
 
 Outputs:
 
-  vectors/core_caa_vectors.pt
-  vectors/auxiliary_caa_vectors.pt
-  vectors/vector_metadata.json
-  results/vector_diagnostics.csv
+  vectors/caa_qwen7b_openrouter_qc_v4/core_caa_vectors.pt
+  vectors/caa_qwen7b_openrouter_qc_v4/auxiliary_caa_vectors.pt
+  vectors/caa_qwen7b_openrouter_qc_v4/vector_metadata.json
+  results/caa_qwen7b_openrouter_qc_v4/vector_diagnostics.csv
 
 Usage:
   python build_caa_vectors.py
@@ -69,13 +71,18 @@ from datetime import datetime, timezone
 
 import torch
 
-DEFAULT_ACT_DIR = "activations"
-DEFAULT_SPLIT_MANIFEST = "data/caa_split_manifest.json"
-DEFAULT_VECTOR_DIR = "vectors"
-DEFAULT_RESULTS_DIR = "results"
+DEFAULT_ACT_DIR = "activations/caa_qwen7b_openrouter_qc_v4"
+DEFAULT_SPLIT_MANIFEST = "data/caa_qwen7b_openrouter_qc_v4/caa_split_manifest_by_vignette.json"
+DEFAULT_VECTOR_DIR = "vectors/caa_qwen7b_openrouter_qc_v4"
+DEFAULT_RESULTS_DIR = "results/caa_qwen7b_openrouter_qc_v4"
 
 FORMAT_VERSION = 1
-SUPPORTED_ACTIVATION_FORMATS = {1}
+SUPPORTED_ACTIVATION_FORMATS = {2}
+EXPECTED_MODEL = "Qwen/Qwen2.5-7B"
+EXPECTED_PROMPT_FORMAT = "qwen2.5-7b-base_plain_role_transcript"
+EXPECTED_TOKENIZATION = "add_special_tokens=False"
+EXPECTED_LAYERS = 28
+EXPECTED_HIDDEN_DIM = 3584
 
 FAMILIES = ["core", "auxiliary"]
 CONTROL_TYPES = ["neutral", "supportive"]
@@ -85,7 +92,8 @@ DIAGNOSTIC_SPLIT = "validation"
 # Provenance fields that must agree between the Core and Auxiliary activation files.
 INVARIANT_FIELDS = ["model_name", "model_revision", "tokenizer_revision", "activation_location",
                     "token_position", "n_layers", "hidden_dim", "chat_template_hash",
-                    "extraction_script_version", "split_manifest_sha256"]
+                    "extraction_script_version", "split_manifest_sha256",
+                    "prompt_format", "tokenization"]
 
 NORMALIZATION = ("none: v[l] is the raw mean of the per-pair differences "
                  "h_experimental - h_control at layer l; unit_vectors holds v[l] / ||v[l]||")
@@ -145,11 +153,37 @@ def load_activations(act_dir, split_manifest_path, allow_hash_mismatch):
             sys.exit(f"ERROR: {path} has unsupported format_version {p.get('format_version')}.")
         if p.get("contrast_type") != family:
             sys.exit(f"ERROR: {path} has contrast_type {p.get('contrast_type')!r}, expected {family!r}.")
+        if p.get("model_name") != EXPECTED_MODEL:
+            sys.exit(f"ERROR: {path} was extracted from {p.get('model_name')!r}; expected {EXPECTED_MODEL}.")
+        if (p.get("n_layers"), p.get("hidden_dim")) != (EXPECTED_LAYERS, EXPECTED_HIDDEN_DIM):
+            sys.exit(f"ERROR: {path} has incompatible model dimensions "
+                     f"{p.get('n_layers')} x {p.get('hidden_dim')}.")
+        if p.get("prompt_format") != EXPECTED_PROMPT_FORMAT:
+            sys.exit(f"ERROR: {path} has prompt_format {p.get('prompt_format')!r}; "
+                     f"expected {EXPECTED_PROMPT_FORMAT!r}.")
+        if p.get("tokenization") != EXPECTED_TOKENIZATION:
+            sys.exit(f"ERROR: {path} has tokenization {p.get('tokenization')!r}; "
+                     f"expected {EXPECTED_TOKENIZATION!r}.")
+        if p.get("token_position") != "final_prompt_token":
+            sys.exit(f"ERROR: {path} has unsupported token position {p.get('token_position')!r}.")
         n = len(p["pair_metadata"])
         for key in ("experimental_activation", "control_activation", "pair_difference"):
             if tuple(p[key].shape) != (n, p["n_layers"], p["hidden_dim"]):
                 sys.exit(f"ERROR: {path}: {key} has shape {tuple(p[key].shape)}, expected "
                          f"{(n, p['n_layers'], p['hidden_dim'])}.")
+        if p.get("pair_ids") != [m.get("pair_id") for m in p["pair_metadata"]]:
+            sys.exit(f"ERROR: {path} pair_ids do not align with pair_metadata.")
+        for key in ("experimental_activation", "control_activation", "pair_difference"):
+            if not torch.isfinite(p[key]).all():
+                sys.exit(f"ERROR: {path} contains non-finite values in {key}.")
+        # Differences are stored separately; detect any misaligned or corrupted rows.
+        if n:
+            delta = (p["experimental_activation"].float() - p["control_activation"].float()
+                     - p["pair_difference"].float()).abs().max().item()
+            tolerance = 1.0 if p["pair_difference"].dtype == torch.bfloat16 else (0.15 if p["pair_difference"].dtype == torch.float16 else 0.01)
+            if delta > tolerance:
+                sys.exit(f"ERROR: {path} pair_difference inconsistent with branches "
+                         f"(max abs error {delta:.4g}).")
         payloads[family] = p
         print(f"Loaded {path}: {n} pairs, {p['n_layers']} layers x {p['hidden_dim']}")
 
@@ -158,6 +192,27 @@ def load_activations(act_dir, split_manifest_path, allow_hash_mismatch):
         if len({json.dumps(v, sort_keys=True) for v in values.values()}) > 1:
             sys.exit(f"ERROR: core and auxiliary activations disagree on {field}: {values}.")
 
+    if not os.path.isfile(split_manifest_path):
+        sys.exit(f"ERROR: split manifest not found: {split_manifest_path}")
+    with open(split_manifest_path, "r", encoding="utf-8") as f:
+        split_manifest = json.load(f)
+    if split_manifest.get("split_unit") != "vignette_id":
+        sys.exit("ERROR: expected a vignette-level split manifest for this dataset.")
+    assignments = split_manifest["assignments"]
+    for family, payload in payloads.items():
+        for m in payload["pair_metadata"]:
+            # Older activation extractors did not copy vignette_id into pair_metadata.
+            # Recover it unambiguously from the cell_id prefix and frozen assignments.
+            vid = m.get("vignette_id")
+            if vid is None:
+                cid = m.get("cell_id") or m.get("conversation_id", "")
+                matches = [v for v in assignments if cid == v or cid.startswith(v + "__")]
+                if len(matches) != 1:
+                    sys.exit(f"ERROR: cannot uniquely recover vignette_id for {family} pair {m.get('pair_id')}: {matches}")
+                vid = matches[0]
+            if assignments.get(vid) != m.get("split"):
+                sys.exit(f"ERROR: split mismatch for {family} pair {m.get('pair_id')} (vignette {vid}).")
+            m["vignette_id"] = vid
     split_hash = sha256_file(split_manifest_path)
     if split_hash != payloads["core"]["split_manifest_sha256"]:
         problem(f"{split_manifest_path} differs from the split manifest used at extraction.")
@@ -199,10 +254,10 @@ def mean_vector(diff):
 
 
 def conversation_sums(diff, meta):
-    """Per-conversation sums and counts, so resampled means are cheap weighted sums."""
-    convs = sorted({m["conversation_id"] for m in meta})
+    """Per-vignette sums and counts for leakage-safe clustered resampling."""
+    convs = sorted({m["vignette_id"] for m in meta})
     index = {c: k for k, c in enumerate(convs)}
-    rows = torch.tensor([index[m["conversation_id"]] for m in meta], dtype=torch.long)
+    rows = torch.tensor([index[m["vignette_id"]] for m in meta], dtype=torch.long)
     sums = torch.zeros((len(convs),) + tuple(diff.shape[1:]), dtype=torch.float64)
     sums.index_add_(0, rows, diff.double())
     counts = torch.bincount(rows, minlength=len(convs)).double()
@@ -280,8 +335,8 @@ def main():
     ap.add_argument("--exclude-soft-flags", nargs="*", default=[],
                     help="drop train pairs carrying any of these qc_soft_flags ('all' = any soft flag); "
                          "for sensitivity analyses, default keeps every hard-QC-passing pair")
-    ap.add_argument("--n-bootstrap", type=int, default=1000, help="conversation-level bootstrap resamples")
-    ap.add_argument("--n-split-halves", type=int, default=200, help="random conversation-level split halves")
+    ap.add_argument("--n-bootstrap", type=int, default=1000, help="vignette-level bootstrap resamples")
+    ap.add_argument("--n-split-halves", type=int, default=200, help="random vignette-level split halves")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--allow-hash-mismatch", action="store_true",
                     help="build even if activation files or the split manifest changed since extraction")
@@ -356,7 +411,8 @@ def main():
                     ("control_type", ct),
                     ("layer", layer),
                     ("n_train_pairs", tr["diff"].shape[0]),
-                    ("n_train_conversations", counts.shape[0]),
+                    ("n_train_vignettes", counts.shape[0]),
+                    ("n_train_conversations", len({m["conversation_id"] for m in tr["meta"]})),
                     ("vector_norm", norm[li].item()),
                     ("residual_norm_mean", residual_norm[key][li].item()),
                     ("relative_norm", (norm[li] / residual_norm[key][li]).item()),
@@ -402,7 +458,10 @@ def main():
         ("tokenizer_revision", payloads["core"]["tokenizer_revision"]),
         ("activation_location", payloads["core"]["activation_location"]),
         ("token_position", payloads["core"]["token_position"]),
-        ("chat_template_hash", payloads["core"]["chat_template_hash"]),
+        ("chat_template_hash", payloads["core"].get("chat_template_hash")),
+        ("prompt_format", payloads["core"]["prompt_format"]),
+        ("tokenization", payloads["core"]["tokenization"]),
+        ("activation_backend", payloads["core"].get("backend")),
         ("n_layers", n_layers),
         ("hidden_dim", hidden_dim),
         ("layers", list(layers)),
@@ -449,6 +508,7 @@ def main():
                 ("n_pairs", len(meta)),
                 ("n_source_states", len({m["source_state_id"] for m in meta})),
                 ("n_conversations", len({m["conversation_id"] for m in meta})),
+                ("n_vignettes", len({m["vignette_id"] for m in meta})),
                 ("n_soft_flag_excluded", data[key]["n_soft_excluded"]),
                 ("target_belief_counts", dict(Counter(str(m.get("target_belief_canonical")) for m in meta))),
                 ("phase_counts", dict(Counter(str(m.get("phase")) for m in meta))),
@@ -463,7 +523,7 @@ def main():
         ("activation_files", act_hashes),
         ("diagnostic_split", DIAGNOSTIC_SPLIT),
         ("test_split_used", False),
-        ("resampling_unit", "conversation_id"),
+        ("resampling_unit", "vignette_id"),
         ("n_bootstrap", args.n_bootstrap),
         ("n_split_halves", args.n_split_halves),
         ("seed", args.seed),
